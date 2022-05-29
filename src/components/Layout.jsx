@@ -10,7 +10,9 @@ export const Layout = () => {
     <div className={style.container}>
       <Header />
       <main className={style.content}>
+        <h2>占位</h2>
         <Outlet />
+        结束
         <hr />
       </main>
       <Footer />

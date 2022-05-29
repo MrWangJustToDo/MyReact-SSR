@@ -3795,90 +3795,6 @@ var allModuleContent = {
         return children;
       }
     },
-    "/home/mrwang/Documents/Web/Code/D_React/MyReact/lib/Core/lib/effect.js": function anonymous(require, module, exports) {
-      "use strict";
-
-      Object.defineProperty(exports, "__esModule", {
-        value: true,
-      });
-      exports.pushEffect = pushEffect;
-      exports.pushLayoutEffect = pushLayoutEffect;
-      exports.runEffect = runEffect;
-      exports.runLayoutEffect = runLayoutEffect;
-
-      var _env = require("./env.js");
-
-      var _fiber = require("./fiber.js");
-
-      function prepareEffectArray(effectArray, index) {
-        effectArray[index] = effectArray[index] || [];
-        return effectArray[index];
-      }
-      /**
-       *
-       * @param {MyReactFiberNode} fiber
-       * @param {Function} effect
-       */
-
-      function pushLayoutEffect(fiber, effect) {
-        prepareEffectArray(_env.pendingLayoutEffectArray.current, fiber.deepIndex).push(effect);
-      }
-
-      function runLayoutEffect() {
-        var allLayoutEffectArray = _env.pendingLayoutEffectArray.current.slice(0);
-
-        for (var i = allLayoutEffectArray.length - 1; i >= 0; i--) {
-          var effectArray = allLayoutEffectArray[i];
-
-          if (Array.isArray(effectArray) && effectArray.length) {
-            effectArray.forEach(function (effect) {
-              if (typeof effect === "function") {
-                effect();
-              } else {
-                effect.__pendingEffect__ = false;
-                effect.effect = false;
-                effect.cancel && effect.cancel();
-                effect.cancel = effect.value();
-              }
-            });
-          }
-        }
-
-        _env.pendingLayoutEffectArray.current = [];
-      }
-      /**
-       *
-       * @param {MyReactFiberNode} fiber
-       * @param {Function} effect
-       */
-
-      function pushEffect(fiber, effect) {
-        prepareEffectArray(_env.pendingEffectArray.current, fiber.deepIndex).push(effect);
-      }
-
-      function runEffect() {
-        var allEffectArray = _env.pendingEffectArray.current.slice(0);
-
-        if (allEffectArray.length) {
-          setTimeout(function () {
-            for (var i = allEffectArray.length - 1; i >= 0; i--) {
-              var effectArray = allEffectArray[i];
-
-              if (Array.isArray(effectArray)) {
-                effectArray.forEach(function (effect) {
-                  effect.__pendingEffect__ = false;
-                  effect.effect = false;
-                  effect.cancel && effect.cancel();
-                  effect.cancel = effect.value();
-                });
-              }
-            }
-          });
-        }
-
-        _env.pendingEffectArray.current = [];
-      }
-    },
     "/home/mrwang/Documents/Web/Code/D_React/MyReact/lib/Core/lib/env.js": function anonymous(require, module, exports) {
       "use strict";
 
@@ -3982,6 +3898,90 @@ var allModuleContent = {
       exports.pendingUnmountFiberArray = pendingUnmountFiberArray;
       var pendingPositionFiberArray = (0, _tools.createRef)([]);
       exports.pendingPositionFiberArray = pendingPositionFiberArray;
+    },
+    "/home/mrwang/Documents/Web/Code/D_React/MyReact/lib/Core/lib/effect.js": function anonymous(require, module, exports) {
+      "use strict";
+
+      Object.defineProperty(exports, "__esModule", {
+        value: true,
+      });
+      exports.pushEffect = pushEffect;
+      exports.pushLayoutEffect = pushLayoutEffect;
+      exports.runEffect = runEffect;
+      exports.runLayoutEffect = runLayoutEffect;
+
+      var _env = require("./env.js");
+
+      var _fiber = require("./fiber.js");
+
+      function prepareEffectArray(effectArray, index) {
+        effectArray[index] = effectArray[index] || [];
+        return effectArray[index];
+      }
+      /**
+       *
+       * @param {MyReactFiberNode} fiber
+       * @param {Function} effect
+       */
+
+      function pushLayoutEffect(fiber, effect) {
+        prepareEffectArray(_env.pendingLayoutEffectArray.current, fiber.deepIndex).push(effect);
+      }
+
+      function runLayoutEffect() {
+        var allLayoutEffectArray = _env.pendingLayoutEffectArray.current.slice(0);
+
+        for (var i = allLayoutEffectArray.length - 1; i >= 0; i--) {
+          var effectArray = allLayoutEffectArray[i];
+
+          if (Array.isArray(effectArray) && effectArray.length) {
+            effectArray.forEach(function (effect) {
+              if (typeof effect === "function") {
+                effect();
+              } else {
+                effect.__pendingEffect__ = false;
+                effect.effect = false;
+                effect.cancel && effect.cancel();
+                effect.cancel = effect.value();
+              }
+            });
+          }
+        }
+
+        _env.pendingLayoutEffectArray.current = [];
+      }
+      /**
+       *
+       * @param {MyReactFiberNode} fiber
+       * @param {Function} effect
+       */
+
+      function pushEffect(fiber, effect) {
+        prepareEffectArray(_env.pendingEffectArray.current, fiber.deepIndex).push(effect);
+      }
+
+      function runEffect() {
+        var allEffectArray = _env.pendingEffectArray.current.slice(0);
+
+        if (allEffectArray.length) {
+          setTimeout(function () {
+            for (var i = allEffectArray.length - 1; i >= 0; i--) {
+              var effectArray = allEffectArray[i];
+
+              if (Array.isArray(effectArray)) {
+                effectArray.forEach(function (effect) {
+                  effect.__pendingEffect__ = false;
+                  effect.effect = false;
+                  effect.cancel && effect.cancel();
+                  effect.cancel = effect.value();
+                });
+              }
+            }
+          });
+        }
+
+        _env.pendingEffectArray.current = [];
+      }
     },
     "/home/mrwang/Documents/Web/Code/D_React/MyReact/lib/Core/lib/fiber.js": function anonymous(require, module, exports) {
       "use strict";
@@ -5659,6 +5659,7 @@ var allModuleContent = {
        */
 
       function getInsertBeforeDomFromSibling(fiber) {
+        if (!fiber) return null;
         var sibling = fiber.fiberSibling;
 
         if (sibling) {
@@ -5673,21 +5674,10 @@ var allModuleContent = {
        */
 
       function getInsertBeforeDomFromSiblingAndParent(fiber) {
+        if (!fiber) return null;
         var beforeDom = getInsertBeforeDomFromSibling(fiber);
         if (beforeDom) return beforeDom;
-        var parentSibling = fiber.fiberParent.fiberSibling;
-
-        if (parentSibling) {
-          if (parentSibling.__isPlainNode__ || parentSibling.__isTextNode__) {
-            return parentSibling.dom;
-          } else if (parentSibling.child) {
-            return getInsertBeforeDomFromSiblingAndParent(parentSibling.child);
-          } else {
-            return null;
-          }
-        }
-
-        return null;
+        return getInsertBeforeDomFromSiblingAndParent(fiber.fiberParent);
       }
       /**
        *
