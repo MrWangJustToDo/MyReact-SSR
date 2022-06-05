@@ -21,7 +21,7 @@
     "strictNullChecks": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["node", "jest", "webpack-env"],
+    "types": ["node", "webpack-env" ],
     "paths": {
       "server/*": ["src/server/*"],
       "client/*": ["src/client/*"],
@@ -41,9 +41,7 @@
       "components/*": ["src/components/*"],
       "webpackConfig/*": ["webpack/*"],
       "script/*": ["script/*"],
-      "lang/*": ["lang/*"],
-      "react": ["lib/react.js"],
-      "react-dom": ["lib/react.js"]
+      "lang/*": ["lang/*"]
     },
     "incremental": true
   },

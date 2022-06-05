@@ -1,4 +1,6 @@
 const path = require("path");
+// worker 执行
+const threadLoader = require("thread-loader");
 // 抽离css文件
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 
@@ -17,10 +19,21 @@ const cssRules = (env, isDev = true) => {
 };
 
 const jsRules = (env, isDev = true) => {
+  const workerPool = {
+    workers: 3,
+    poolTimeout: isDev ? Infinity : 2000,
+  };
+
+  threadLoader.warmup(workerPool, ["babel-loader"]);
+
   return {
     test: /\.[jt]sx?$/,
-    exclude: [/node_modules/],
+    exclude: /node_modules/,
     use: [
+      {
+        loader: require.resolve("thread-loader"),
+        options: workerPool,
+      },
       {
         loader: require.resolve("babel-loader"),
         options: {

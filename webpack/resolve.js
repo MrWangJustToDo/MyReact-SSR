@@ -1,7 +1,7 @@
 const path = require("path");
 
 const resolveConfig = () => {
-  const basePath = path.resolve(__dirname, '..');
+  const basePath = path.resolve(process.cwd());
   return {
     alias: {
       server: path.resolve(basePath, "src", "server"),
@@ -20,9 +20,6 @@ const resolveConfig = () => {
       webpackConfig: path.resolve(basePath, "webpack"),
       script: path.resolve(basePath, "script"),
       lang: path.resolve(basePath, "lang"),
-      // react: path.resolve(basePath, "lib", "react.js"),
-      // "react-dom": path.resolve(basePath, "lib", "react.js"),
-      // "react-dom/server": path.resolve(basePath, "lib", "react.js")
     },
     extensions: [".ts", ".tsx", ".js", ".jsx", ".json", ".css", ".scss"],
   };

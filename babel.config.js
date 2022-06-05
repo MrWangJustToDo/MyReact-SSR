@@ -26,12 +26,17 @@ module.exports = (api) => {
     },
   ]);
   presets.push("@babel/preset-typescript");
+  // new react jsx runtime support. SEE https://reactjs.org/blog/2020/09/22/introducing-the-new-jsx-transform.html#removing-unused-react-imports
   presets.push(["@babel/preset-react", { development: !api.env("production"), runtime: "classic" }]);
 
   plugins.push(["@babel/plugin-proposal-decorators", { legacy: true }]);
   plugins.push(["@babel/plugin-proposal-class-properties", { loose: true }]);
   plugins.push(["@babel/plugin-proposal-private-methods", { loose: true }]);
   plugins.push(["@babel/plugin-proposal-private-property-in-object", { loose: true }]);
+  // 自带了
+  // plugins.push("@babel/plugin-proposal-object-rest-spread");
+  // plugins.push("@babel/plugin-proposal-optional-chaining");
+  // plugins.push("@babel/plugin-syntax-dynamic-import");
   plugins.push("@babel/plugin-transform-runtime");
   plugins.push("@babel/plugin-proposal-export-default-from");
   plugins.push("@loadable/babel-plugin");
@@ -41,4 +46,3 @@ module.exports = (api) => {
     plugins,
   };
 };
-
