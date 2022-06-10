@@ -1,4 +1,4 @@
-import { Carousel, Slider, Switch } from "antd";
+import { Carousel, Slider, Switch, Calendar } from "antd";
 
 const AntDesignComponent = () => {
   return (
@@ -7,6 +7,8 @@ const AntDesignComponent = () => {
       <Switch />
       <br />
       <Slider />
+      <br />
+      <Calendar />
       <div style={{ width: "300px", borderRadius: "0.6rem", overflow: "hidden" }}>
         <Carousel autoplay>
           <div>
