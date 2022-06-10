@@ -10,10 +10,12 @@ export const Layout: PreLoadComponentType = () => {
   return (
     <div className={style.container}>
       <Header />
+      <div>header ---- body</div>
       <main className={style.content}>
         <Outlet />
         <hr />
       </main>
+      <div>body ----- footer</div>
       <Footer />
     </div>
   );

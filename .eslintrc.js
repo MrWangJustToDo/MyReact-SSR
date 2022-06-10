@@ -44,7 +44,7 @@ module.exports = {
       version: "detect",
     },
     "import/parsers": {
-      "@typescript-eslint/parser": [".ts", ".tsx"],
+      "@typescript-eslint/parser": [".ts", ".tsx", ".js"],
     },
     "import/resolver": {
       typescript: {

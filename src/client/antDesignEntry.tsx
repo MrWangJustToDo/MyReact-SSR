@@ -14,11 +14,9 @@ const Root = ({ store }: { store: ReturnType<typeof createUniversalStore> }) => 
     <StrictMode>
       <Provider store={store}>
         <Router>
-          <>
-            <HelmetProvider>
-              <App />
-            </HelmetProvider>
-          </>
+          <HelmetProvider>
+            <App />
+          </HelmetProvider>
         </Router>
       </Provider>
     </StrictMode>
