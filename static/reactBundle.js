@@ -418,8 +418,17 @@ var MyReactComponent = /*#__PURE__*/function (_MyReactInternalInsta) {
 
       _this.__nextState__ = Object.assign({}, _this.__nextState__, newState);
       callback && _this.__pendingCallback__.push(callback);
+
+      try {
+        _this.updateTimeStep();
+      } catch (e) {
+        _this.error = true;
+      }
+
       Promise.resolve().then(function () {
-        return _this.__fiber__.update();
+        if (!_this.error) {
+          _this.__fiber__.update();
+        }
       });
     });
 
@@ -1434,6 +1443,8 @@ var domPropsHydrate = function domPropsHydrate(fiber, dom, props) {
   Object.keys(props).filter(_prop.isProperty).forEach(function (key) {
     var _props$key;
 
+    if (props[key] === null || props[key] === undefined) return;
+
     if (!fiber.nameSpace && key === "className") {
       if (dom[key] !== props[key]) {
         (0, _debug.warning)({
@@ -1447,7 +1458,7 @@ var domPropsHydrate = function domPropsHydrate(fiber, dom, props) {
     }
 
     if (key === "value") {
-      dom[key] !== props[key];
+      if (dom[key] !== props[key]) dom[key] = props[key];
       return;
     }
 
@@ -1471,7 +1482,7 @@ var domPropsHydrate = function domPropsHydrate(fiber, dom, props) {
 
 var domEventHydrate = function domEventHydrate(fiber, dom, props) {
   Object.keys(props).filter(_prop.isEvent).forEach(function (key) {
-    var _getNativeEventName = (0, _tool.getNativeEventName)(key.slice(2)),
+    var _getNativeEventName = (0, _tool.getNativeEventName)(key.slice(2), fiber.__vdom__),
         eventName = _getNativeEventName.eventName,
         isCapture = _getNativeEventName.isCapture;
 
@@ -1958,9 +1969,11 @@ var _env = require("../env.js");
 
 var _highlight = require("./highlight.js");
 
+var _index = require("../vdom/index.js");
+
 var _share = require("../share.js");
 
-var _index = require("../fiber/index.js");
+var _index2 = require("../fiber/index.js");
 
 var _prop = require("./prop.js");
 
@@ -2009,13 +2022,14 @@ var findLatestDomFromComponentFiber = function findLatestDomFromComponentFiber(f
 /**
  *
  * @param {string} eventName
+ * @param {MyReactVDom} vdom
  * @returns
  */
 
 
 exports.findLatestDomFromComponentFiber = findLatestDomFromComponentFiber;
 
-var getNativeEventName = function getNativeEventName(eventName) {
+var getNativeEventName = function getNativeEventName(eventName, vdom) {
   var isCapture = false;
 
   if (eventName.endsWith("Capture")) {
@@ -2025,6 +2039,18 @@ var getNativeEventName = function getNativeEventName(eventName) {
 
   if (eventName === "DoubleClick") {
     eventName = "dblclick";
+  } else if (eventName === "Change") {
+    if (vdom.type === "input") {
+      var _vdom$props, _vdom$props2;
+
+      if (((_vdom$props = vdom.props) === null || _vdom$props === void 0 ? void 0 : _vdom$props.type) === "radio" || ((_vdom$props2 = vdom.props) === null || _vdom$props2 === void 0 ? void 0 : _vdom$props2.type) === "checkbox") {
+        eventName = "click";
+      } else {
+        eventName = "input";
+      }
+    } else {
+      eventName = "change";
+    }
   } else {
     eventName = eventName.toLowerCase();
   }
@@ -2053,7 +2079,7 @@ var updateDom = function updateDom(element, oldProps, newProps, fiber) {
     Object.keys(oldProps).filter(_prop.isEvent).filter(function (key) {
       return (0, _prop.isGone)(newProps)(key) || (0, _prop.isNew)(oldProps, newProps)(key);
     }).forEach(function (key) {
-      var _getNativeEventName = getNativeEventName(key.slice(2)),
+      var _getNativeEventName = getNativeEventName(key.slice(2), fiber.__preRenderVdom__),
           isCapture = _getNativeEventName.isCapture,
           eventName = _getNativeEventName.eventName;
 
@@ -2072,7 +2098,7 @@ var updateDom = function updateDom(element, oldProps, newProps, fiber) {
       });
     });
     Object.keys(newProps).filter(_prop.isEvent).filter((0, _prop.isNew)(oldProps, newProps)).forEach(function (key) {
-      var _getNativeEventName2 = getNativeEventName(key.slice(2)),
+      var _getNativeEventName2 = getNativeEventName(key.slice(2), fiber.__vdom__),
           eventName = _getNativeEventName2.eventName,
           isCapture = _getNativeEventName2.isCapture;
 
@@ -2129,7 +2155,7 @@ var getDom = function getDom(fiber, transform) {
 };
 
 exports.getDom = getDom;
-},{"../env.js":19,"../fiber/index.js":21,"../share.js":37,"./highlight.js":11,"./prop.js":14}],17:[function(require,module,exports){
+},{"../env.js":19,"../fiber/index.js":21,"../share.js":37,"../vdom/index.js":45,"./highlight.js":11,"./prop.js":14}],17:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -2210,7 +2236,7 @@ var runEffect = function runEffect() {
             effect.effect = false;
             effect.__pendingEffect__ = false;
             effect.cancel && effect.cancel();
-            effect.cancel = effect.value();
+            if (effect.__fiber__.mount) effect.cancel = effect.value();
           });
         }
       }
@@ -2804,6 +2830,8 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
               args[_key2] = arguments[_key2];
             }
 
+            var e = args[0];
+            e.nativeEvent = e;
             (0, _debug.safeCallWithFiber)({
               action: function action() {
                 return handler.cb.forEach(function (cb) {
@@ -2813,7 +2841,15 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
               fiber: _this2
             });
 
-            if (_env.enableControlComponent.current) {}
+            if (_env.enableControlComponent.current) {
+              if (_this2.__vdom__.type === "input") {
+                var _this2$memoProps;
+
+                if (((_this2$memoProps = _this2.memoProps) === null || _this2$memoProps === void 0 ? void 0 : _this2$memoProps.value) !== undefined) {
+                  _this2.dom["value"] = _this2.memoProps.value;
+                }
+              }
+            }
           };
 
           handler.cb = [cb];
@@ -3841,12 +3877,22 @@ var MyReactHookNode = /*#__PURE__*/function (_MyReactInternalInsta) {
     _defineProperty(_assertThisInitialized(_this), "__pendingEffect", false);
 
     _defineProperty(_assertThisInitialized(_this), "dispatch", function (action) {
+      try {
+        _this.updateTimeStep();
+      } catch (e) {
+        _this.error = true;
+      }
+
       _this.prevResult = _this.result;
       _this.result = _this.reducer(_this.result, action);
 
       if (!Object.is(_this.result, _this.prevResult)) {
         Promise.resolve().then(function () {
-          return _this.__fiber__.update();
+          if (!_this.error) {
+            _this.__fiber__.update();
+          } else {
+            _this.cancel && _this.cancel();
+          }
         });
       }
     });
@@ -4731,6 +4777,10 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.createRef = exports.SORT_BY_DEEP_HEAP = exports.NODE_TYPE_KEY = exports.MyReactInternalType = exports.MyReactInternalInstance = exports.IS_UNIT_LESS_NUMBER = exports.IS_SINGLE_ELEMENT = exports.EMPTY_OBJECT = exports.EMPTY_ARRAY = exports.DEFAULT_NODE_TYPE = exports.COMPONENT_METHOD = void 0;
 
+var _debug = require("./debug.js");
+
+var _env = require("./env.js");
+
 function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
@@ -5113,6 +5163,10 @@ var MyReactInternalInstance = /*#__PURE__*/function () {
     _defineProperty(this, "__fiber__", null);
 
     _defineProperty(this, "__context__", null);
+
+    _defineProperty(this, "__hecticCount__", 0);
+
+    _defineProperty(this, "__updateTimeStep__", null);
   }
 
   _createClass(MyReactInternalInstance, [{
@@ -5139,6 +5193,28 @@ var MyReactInternalInstance = /*#__PURE__*/function () {
     value: function setFiber(fiber) {
       this.__fiber__ = fiber;
     }
+  }, {
+    key: "updateTimeStep",
+    value: function updateTimeStep() {
+      if (_env.enableAllCheck.current) {
+        var now = new Date().getTime();
+
+        if (now - this.__updateTimeStep__ <= 8) {
+          this.__hecticCount__ += 1;
+        } else {
+          this.__hecticCount__ = 0;
+        }
+
+        if (this.__hecticCount__ > 40) {
+          (0, _debug.error)({
+            message: "look like have a infinity loop on current component",
+            fiber: this.__fiber__
+          });
+        }
+
+        this.__updateTimeStep__ = now;
+      }
+    }
   }]);
 
   return MyReactInternalInstance;
@@ -5159,7 +5235,7 @@ var createRef = function createRef(val) {
 };
 
 exports.createRef = createRef;
-},{}],38:[function(require,module,exports){
+},{"./debug.js":8,"./env.js":19}],38:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {

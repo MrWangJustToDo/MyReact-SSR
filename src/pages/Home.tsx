@@ -5,13 +5,11 @@ export default function Home() {
   useEffect(() => {
     const id = setInterval(() => {
       setState(new Date().toString());
-    });
-    return () => clearInterval(id);
+    }, 1000);
+    return () => {
+      clearInterval(id);
+    };
   });
 
-  return (
-    <div>
-      home page {state}
-    </div>
-  );
+  return <div>home page {state}</div>;
 }
