@@ -26,7 +26,7 @@ exports.mapByJudgeFunction = mapByJudgeFunction;
 
 var map = function map(arrayLike, action) {
   return mapByJudgeFunction(arrayLike, function (v) {
-    return v instanceof _index.MyReactVDom;
+    return v !== undefined;
   }, action);
 };
 
@@ -44,7 +44,7 @@ exports.toArray = toArray;
 
 var forEach = function forEach(arrayLike, action) {
   mapByJudgeFunction(arrayLike, function (v) {
-    return v instanceof _index.MyReactVDom;
+    return v !== undefined;
   }, action);
 };
 
@@ -141,9 +141,11 @@ var processComponentInstanceOnMount = function processComponentInstanceOnMount(f
   var Component = fiber.__isDynamicNode__ ? fiber.__vdom__.type : fiber.__vdom__.type.render;
   var providerFiber = (0, _index2.getContextFiber)(fiber, Component.contextType);
   var context = providerFiber ? providerFiber.__vdom__.props.value : (_Component$contextTyp = Component.contextType) === null || _Component$contextTyp === void 0 ? void 0 : _Component$contextTyp.Provider.value;
-  var instance = new Component(fiber.__vdom__.props, context);
-  instance.props = Object.assign({}, fiber.__vdom__.props);
-  instance.context = _typeof(context) === "object" ? Object.assign({}, context) : context;
+  var contextValue = _typeof(context) === "object" && context !== null ? Object.assign({}, context) : context;
+  var instance = new Component(fiber.__vdom__.props, contextValue);
+  instance.props = Object.assign({}, fiber.__vdom__.props); // fix context value
+
+  instance.context = contextValue;
   fiber.installInstance(instance);
   fiber.checkInstance(instance);
   fiber.instance.setFiber(fiber);
@@ -215,7 +217,7 @@ var processComponentContextOnUpdate = function processComponentContextOnUpdate(f
     var providerFiber = (0, _index2.getContextFiber)(fiber, Component.contextType);
     var context = providerFiber ? providerFiber.__vdom__.props.value : (_Component$contextTyp2 = Component.contextType) === null || _Component$contextTyp2 === void 0 ? void 0 : _Component$contextTyp2.Provider.value;
     fiber.instance.setContext(providerFiber);
-    return _typeof(context) === "object" ? Object.assign({}, context) : context;
+    return _typeof(context) === "object" && context !== null ? Object.assign({}, context) : context;
   }
 
   return fiber.instance.context;
@@ -648,19 +650,20 @@ var nextWorkForwardRef = function nextWorkForwardRef(fiber) {
 var nextWorkProvider = function nextWorkProvider(fiber) {
   // maybe need other way to get provider state
   if (_env.isMounted.current && fiber.initial) {
-    var listenerFibers = fiber.dependence.map(function (node) {
+    var listenerFibers = fiber.__dependence__.map(function (node) {
       return node.__fiber__;
     }); // update only alive fiber
 
+
     Promise.resolve().then(function () {
-      return listenerFibers.filter(function (f) {
+      var aliveListenerFibers = listenerFibers.filter(function (f) {
         return f.mount;
-      }).forEach(function (f) {
+      });
+      aliveListenerFibers.forEach(function (f) {
         return f.update();
       });
     });
-  } // fiber.__vdom__.type.Context.__context__ = fiber;
-
+  }
 
   return nextWorkCommon(fiber);
 };
@@ -782,13 +785,14 @@ var isSameTypeNode = function isSameTypeNode(newVDom, previousRenderChild) {
   }
 
   if (newVDomIsVDomInstance) return false;
-  if (previousRenderChildVDomIsVDomInstance) return false; // text node
+  if (previousRenderChildVDomIsVDomInstance) return false; // fallback node
+
+  if (newVDom === null || newVDom === false) return previousRenderChildVDom === ""; // text node
 
   if (_typeof(newVDom) !== "object") {
     return previousRenderChild && previousRenderChild.__isTextNode__;
   }
 
-  if (newVDom === null) return previousRenderChild === null;
   return false;
 };
 /**
@@ -865,6 +869,7 @@ var getNewFiberWithUpdate = function getNewFiberWithUpdate(newVDom, parentFiber,
       matchedPreviousRenderChild = getMatchedRenderChildren(newVDom, matchedPreviousRenderChild);
 
       if (newVDom.length < matchedPreviousRenderChild.length) {
+        // console.log(newVDom, matchedPreviousRenderChild);
         (0, _unmount.pushUnmount)(matchedPreviousRenderChild.slice(newVDom.length));
       }
 
@@ -927,7 +932,7 @@ var getNewFiberWithUpdate = function getNewFiberWithUpdate(newVDom, parentFiber,
 
 var transformChildrenFiber = function transformChildrenFiber(parentFiber, children) {
   var index = 0;
-  var isNewChildren = Boolean(parentFiber.__renderedChildren__.length === 0);
+  var isNewChildren = Boolean(!parentFiber.fiberAlternate);
   var vdomChildren = Array.isArray(children) ? children : [children];
   var previousRenderChildren = isNewChildren ? [] : parentFiber.__renderedChildren__;
   var assignPreviousRenderChildren = getMatchedRenderChildren(vdomChildren, previousRenderChildren);
@@ -968,17 +973,20 @@ var _instance = require("./hook/instance.js");
  * @param {MyReactFiberNode} fiber
  */
 var trackDevLog = function trackDevLog(fiber) {
-  var _vdom$props;
+  var _vdom$props, _vdom$type;
 
+  var showDisplayName = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
   var vdom = fiber.__vdom__;
   var source = vdom === null || vdom === void 0 ? void 0 : (_vdom$props = vdom.props) === null || _vdom$props === void 0 ? void 0 : _vdom$props.__source;
+  var displayName = (vdom === null || vdom === void 0 ? void 0 : (_vdom$type = vdom.type) === null || _vdom$type === void 0 ? void 0 : _vdom$type.displayName) || "";
+  var preString = showDisplayName && displayName ? " - ".concat(displayName, " ") : "";
 
   if (source) {
     var fileName = source.fileName,
         lineNumber = source.lineNumber;
-    return " (".concat(fileName, ":").concat(lineNumber, ")");
+    return "".concat(preString, " (").concat(fileName, ":").concat(lineNumber, ")");
   } else {
-    return "";
+    return "".concat(preString);
   }
 };
 /**
@@ -998,7 +1006,7 @@ var getFiberNodeName = function getFiberNodeName(fiber) {
   if (fiber.__isContextConsumer__) return "<Consumer />".concat(trackDevLog(fiber));
   if (fiber.__isPlainNode__) return "<".concat(fiber.__vdom__.type, " />").concat(trackDevLog(fiber));
   if (fiber.__isTextNode__) return "<text - (".concat(fiber.__vdom__, ") />").concat(trackDevLog(fiber));
-  if (fiber.__isDynamicNode__) return "<".concat(fiber.__vdom__.type.displayName || fiber.__vdom__.type.name || "Unknown", " */> ").concat(trackDevLog(fiber));
+  if (fiber.__isDynamicNode__) return "<".concat(fiber.__vdom__.type.displayName || fiber.__vdom__.type.name || "Unknown", " */> ").concat(trackDevLog(fiber, false));
   return "<Undefined />".concat(trackDevLog(fiber));
 };
 
@@ -1441,9 +1449,7 @@ var _share = require("../share.js");
  */
 var domPropsHydrate = function domPropsHydrate(fiber, dom, props) {
   Object.keys(props).filter(_prop.isProperty).forEach(function (key) {
-    var _props$key;
-
-    if (props[key] === null || props[key] === undefined) return;
+    if (props[key] === null || props[key] === undefined || props[key] === false) return;
 
     if (!fiber.nameSpace && key === "className") {
       if (dom[key] !== props[key]) {
@@ -1457,17 +1463,29 @@ var domPropsHydrate = function domPropsHydrate(fiber, dom, props) {
       return;
     }
 
+    if (fiber.nameSpace && key === "className") {
+      if (dom.getAttribute("class") !== props[key].toString()) {
+        (0, _debug.warning)({
+          message: "hydrate warning, dom class not match from server, server: ".concat(dom.getAttribute("class"), ", client: ").concat(props[key]),
+          fiber: fiber
+        });
+        dom.setAttribute("class", props[key]);
+      }
+
+      return;
+    }
+
     if (key === "value") {
       if (dom[key] !== props[key]) dom[key] = props[key];
       return;
     }
 
-    if (props[key] !== null && props[key] !== undefined && dom.getAttribute(key === "className" ? "class" : key) !== ((_props$key = props[key]) === null || _props$key === void 0 ? void 0 : _props$key.toString())) {
+    if (props[key] !== null && props[key] !== undefined && dom.getAttribute(key) !== props[key].toString()) {
       (0, _debug.warning)({
-        message: "hydrate warning, dom attrs not match from server, server: ".concat(dom.getAttribute(key === "className" ? "class" : key), ", client: ").concat(props[key]),
+        message: "hydrate warning, dom attrs not match from server, server: ".concat(dom.getAttribute(key), ", client: ").concat(props[key]),
         fiber: fiber
       });
-      dom.setAttribute(key === "className" ? "class" : key, props[key]);
+      dom.setAttribute(key, props[key]);
     }
   });
 };
@@ -1819,7 +1837,9 @@ var Element = /*#__PURE__*/function () {
   }, {
     key: "setAttribute",
     value: function setAttribute(key, value) {
-      this.attrs[key] = value;
+      if (value !== false && value !== null && value !== undefined) {
+        this.attrs[key] = value;
+      }
     }
     /**
      *
@@ -2068,6 +2088,7 @@ var getNativeEventName = function getNativeEventName(eventName, vdom) {
  * @param {MyReactFiberNode} fiber
  * @returns
  */
+// TODO need improve props & attrs
 
 
 exports.getNativeEventName = getNativeEventName;
@@ -2086,10 +2107,16 @@ var updateDom = function updateDom(element, oldProps, newProps, fiber) {
       fiber.removeEventListener(eventName, oldProps[key], isCapture);
     });
     Object.keys(oldProps).filter(_prop.isProperty).filter((0, _prop.isGone)(newProps)).forEach(function (key) {
-      if (fiber.nameSpace && (key === "className" || key === "value")) {
+      if (key === "className") {
+        if (fiber.nameSpace) {
+          element.removeAttribute("class");
+        } else {
+          element[key] = "";
+        }
+      } else if (key === "value") {
         element[key] = "";
       } else {
-        element.removeAttribute(key === "className" ? "class" : key);
+        element.removeAttribute(key);
       }
     });
     Object.keys(oldProps).filter(_prop.isStyle).forEach(function (styleKey) {
@@ -2105,28 +2132,38 @@ var updateDom = function updateDom(element, oldProps, newProps, fiber) {
       fiber.addEventListener(eventName, newProps[key], isCapture);
     });
     Object.keys(newProps).filter(_prop.isProperty).filter((0, _prop.isNew)(oldProps, newProps)).forEach(function (key) {
-      if (!fiber.nameSpace && (key === "className" || key === "value")) {
+      if (newProps[key] === undefined || newProps[key] === null || newProps[key] === false) return;
+
+      if (key === "className") {
+        if (fiber.nameSpace) {
+          element.setAttribute("class", newProps[key]);
+        } else {
+          element[key] = newProps[key];
+        }
+      } else if (key === "autofocus" || key === "autoFocus") {
+        if (newProps[key]) {
+          element[key.toLowerCase()] = newProps[key];
+          Promise.resolve().then(function () {
+            element.focus();
+          });
+        }
+      } else if (key === "value") {
         element[key] = newProps[key];
       } else {
-        element.setAttribute(key === "className" ? "class" : key, newProps[key]);
+        element.setAttribute(key, newProps[key]);
       }
     });
     Object.keys(newProps).filter(_prop.isStyle).forEach(function (styleKey) {
       Object.keys(newProps[styleKey] || {}).filter((0, _prop.isNew)(oldProps[styleKey] || {}, newProps[styleKey])).forEach(function (styleName) {
-        if (!_share.IS_UNIT_LESS_NUMBER[styleName]) {
-          if (typeof newProps[styleKey][styleName] === "number") {
-            element.style[styleName] = "".concat(newProps[styleKey][styleName], "px");
-            return;
-          } else {
-            element.style[styleName] = newProps[styleKey][styleName];
-            return;
-          }
+        if (!_share.IS_UNIT_LESS_NUMBER[styleName] && typeof newProps[styleKey][styleName] === "number") {
+          element[styleKey][styleName] = "".concat(newProps[styleKey][styleName], "px");
+          return;
         }
 
         if (newProps[styleKey][styleName] !== null && newProps[styleKey][styleName] !== undefined) {
-          element.style[styleName] = newProps[styleKey][styleName];
+          element[styleKey][styleName] = newProps[styleKey][styleName];
         } else {
-          element.style[styleName] = null;
+          element[styleKey][styleName] = "";
         }
       });
     });
@@ -2274,10 +2311,12 @@ function createPortal(element, container) {
   }, element);
 }
 
+var contextId = 0;
+
 function createContext(value) {
   var ContextObject = {
     type: _symbol.Context,
-    __context__: null
+    id: contextId++
   };
   var ProviderObject = {
     type: _symbol.Provider,
@@ -2439,7 +2478,9 @@ var createNewFiberNode = function createNewFiberNode(_ref, vdom) {
   newFiber.installVDom(vdom);
   newFiber.checkVDom(vdom);
   newFiber.initialType();
+  newFiber.initialContext();
   newFiber.resetEffect();
+  newFiber.resetPortal();
   return newFiber;
 };
 /**
@@ -2513,6 +2554,7 @@ var createUpdatedFiberNode = function createUpdatedFiberNode(_ref4, vdom) {
   newFiber.updateFromAlternate();
   newFiber.installVDom(vdom);
   newFiber.checkVDom(vdom);
+  newFiber.initialContext();
   return newFiber;
 };
 /**
@@ -2719,7 +2761,8 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
       __renderedCount__: 1,
       __renderDynamic__: false,
       __updateTimeStep__: Date.now(),
-      __lastUpdateTimeStep__: null
+      __lastUpdateTimeStep__: null,
+      __newestFiber__: (0, _share.createRef)(_assertThisInitialized(_this))
     });
 
     _defineProperty(_assertThisInitialized(_this), "__internal_node_state__", {
@@ -2734,6 +2777,14 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
     _defineProperty(_assertThisInitialized(_this), "dom", void 0);
 
     _defineProperty(_assertThisInitialized(_this), "__internal_event_state__", {});
+
+    _defineProperty(_assertThisInitialized(_this), "__internal_context_map__", {
+      /**
+       * @type MyReactInstance[]
+       */
+      __dependence__: [],
+      __contextMap__: {}
+    });
 
     return _this;
   }
@@ -2777,6 +2828,14 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
     },
     set: function set(v) {
       this.__internal_node_diff__.__renderDynamic__ = v;
+    }
+  }, {
+    key: "__newestFiber__",
+    get: function get() {
+      return this.__internal_node_diff__.__newestFiber__;
+    },
+    set: function set(v) {
+      this.__internal_node_diff__.__newestFiber__ = v;
     }
   }, {
     key: "__pendingMount__",
@@ -2842,7 +2901,8 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
             });
 
             if (_env.enableControlComponent.current) {
-              if (_this2.__vdom__.type === "input") {
+              // TODO more
+              if (_this2.__vdom__.type === "input" && event === "input") {
                 var _this2$memoProps;
 
                 if (((_this2$memoProps = _this2.memoProps) === null || _this2$memoProps === void 0 ? void 0 : _this2$memoProps.value) !== undefined) {
@@ -2872,6 +2932,51 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
       } else {
         this.dom.removeEventListener(event, cb, isCapture);
       }
+    }
+  }, {
+    key: "__dependence__",
+    get: function get() {
+      return this.__internal_context_map__.__dependence__;
+    },
+    set: function set(v) {
+      this.__internal_context_map__.__dependence__ = v;
+    }
+  }, {
+    key: "__contextMap__",
+    get: function get() {
+      return this.__internal_context_map__.__contextMap__;
+    },
+    set: function set(v) {
+      this.__internal_context_map__.__contextMap__ = v;
+    }
+    /**
+     *
+     * @param {MyReactInstance} node
+     */
+
+  }, {
+    key: "addDependence",
+    value: function addDependence(node) {
+      var dependence = this.__dependence__;
+
+      if (dependence.every(function (n) {
+        return n !== node;
+      })) {
+        dependence.push(node);
+      }
+    }
+    /**
+     *
+     * @param {MyReactInstance} node
+     */
+
+  }, {
+    key: "removeDependence",
+    value: function removeDependence(node) {
+      var dependence = this.__dependence__;
+      this.__dependence__ = dependence.filter(function (n) {
+        return n !== node;
+      });
     }
   }]);
 
@@ -2932,10 +3037,6 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
    */
 
   /**
-   * @type MyReactInstance[]
-   */
-
-  /**
    * @type MyReactInstance & MyReactComponent
    */
 
@@ -2987,8 +3088,6 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
     _defineProperty(_assertThisInitialized(_this3), "hookFoot", void 0);
 
     _defineProperty(_assertThisInitialized(_this3), "hookList", []);
-
-    _defineProperty(_assertThisInitialized(_this3), "dependence", []);
 
     _defineProperty(_assertThisInitialized(_this3), "instance", null);
 
@@ -3044,6 +3143,27 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
         }
       }
     }
+  }, {
+    key: "initialContext",
+    value: function initialContext() {
+      if (this.fiberParent) {
+        // get ContextMap from parent fiber
+        var contextMap = Object.assign({}, this.fiberParent.__contextMap__, this.__contextMap__); // after vdom install
+
+        if (this.__isContextProvider__) {
+          // get context id;
+          var contextObject = this.__vdom__.type.Context;
+          var contextId = contextObject.id;
+          contextMap[contextId] = this; // if (contextMap[contextId]) {
+          //   contextMap[contextId].current = this;
+          // } else {
+          //   contextMap[contextId] = createRef(this);
+          // }
+        }
+
+        this.__contextMap__ = contextMap;
+      }
+    }
     /**
      *
      * @param {MyReactFiberNode} parentFiber
@@ -3056,38 +3176,11 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
       this.fiberSibling = null;
       this.initialParent();
     }
-    /**
-     *
-     * @param {MyReactInstance} node
-     */
-
-  }, {
-    key: "addDependence",
-    value: function addDependence(node) {
-      if (this.dependence.every(function (n) {
-        return n !== node;
-      })) {
-        this.dependence.push(node);
-      }
-    }
-    /**
-     *
-     * @param {MyReactInstance} node
-     */
-
-  }, {
-    key: "removeDependence",
-    value: function removeDependence(node) {
-      this.dependence = this.dependence.filter(function (n) {
-        return n !== node;
-      });
-    }
   }, {
     key: "updateFromAlternate",
     value: function updateFromAlternate() {
       if (this.fiberAlternate) {
         var fiberAlternate = this.fiberAlternate;
-        this.__renderedCount__ = fiberAlternate.__renderedCount__ + 1;
 
         if (fiberAlternate !== this) {
           // inherit
@@ -3096,8 +3189,9 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
           this.hookFoot = fiberAlternate.hookFoot;
           this.instance = fiberAlternate.instance;
           this.hookList = fiberAlternate.hookList.slice(0);
-          this.dependence = fiberAlternate.dependence.slice(0);
           this.__preRenderVdom__ = fiberAlternate.__preRenderVdom__;
+          this.__dependence__ = fiberAlternate.__dependence__.slice(0);
+          this.__newestFiber__ = fiberAlternate.__newestFiber__;
           this.__renderedChildren__ = fiberAlternate.__renderedChildren__.slice(0);
           this.__internal_node_type__ = Object.assign({}, fiberAlternate.__internal_node_type__);
           this.__internal_event_state__ = Object.assign({}, fiberAlternate.__internal_event_state__); // update
@@ -3106,7 +3200,6 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
           // fiberAlternate.hookHead = null;
           // fiberAlternate.hookFoot = null;
           // fiberAlternate.instance = null;
-          // fiberAlternate.dependence = [];
 
           fiberAlternate.mount = false;
           fiberAlternate.effect = null;
@@ -3115,6 +3208,9 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
           // fiberAlternate.__internal_node_diff__ = null;
           // fiberAlternate.__internal_event_state__ = null;
         }
+
+        this.__renderedCount__ = fiberAlternate.__renderedCount__ + 1;
+        this.__newestFiber__.current = this;
       }
     }
   }, {
@@ -3222,7 +3318,8 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
     value: function installVDom(vdom) {
       this.__vdom__ = vdom;
       this.key = vdom === null || vdom === void 0 ? void 0 : vdom.key;
-      this.memoProps = vdom === null || vdom === void 0 ? void 0 : vdom.props;
+      this.memoProps = vdom === null || vdom === void 0 ? void 0 : vdom.props; // TODO need improve
+
       if ((vdom === null || vdom === void 0 ? void 0 : vdom.type) === "svg") this.nameSpace = "http://www.w3.org/2000/svg";
     }
     /**
@@ -3316,7 +3413,10 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
       if (!this.__isPlainNode__ && !this.__isTextNode__) {
         this.effect = null;
       }
-
+    }
+  }, {
+    key: "resetPortal",
+    value: function resetPortal() {
       if (this.__isPortal__) {
         this.dom = this.__vdom__.props.container;
       }
@@ -3441,7 +3541,18 @@ var getProviderFiber = function getProviderFiber(fiber, providerObject) {
 
 
 var getContextFiber = function getContextFiber(fiber, contextObject) {
-  return getProviderFiber(fiber, contextObject === null || contextObject === void 0 ? void 0 : contextObject.Provider);
+  if (contextObject) {
+    var id = contextObject.id;
+    var providerFiber = fiber.__contextMap__[id];
+    var newestProvider = providerFiber === null || providerFiber === void 0 ? void 0 : providerFiber.__newestFiber__.current;
+
+    if (newestProvider) {
+      fiber.__contextMap__[id] = newestProvider;
+    }
+
+    return newestProvider;
+  } // return getProviderFiber(fiber, contextObject?.Provider);
+
 };
 
 exports.getContextFiber = getContextFiber;
@@ -3471,6 +3582,7 @@ var updateFiberNode = function updateFiberNode(fiber, fiberParent, vdom) {
   fiber.updateFromAlternate();
   fiber.installVDom(vdom);
   fiber.checkVDom(vdom);
+  fiber.initialContext();
   return fiber;
 };
 /**
@@ -3689,6 +3801,9 @@ var pushHookEffect = function pushHookEffect(hookNode) {
         if (hookNode.value && _typeof(hookNode.value) === "object") {
           hookNode.value.current = hookNode.reducer.call(null);
         }
+
+        hookNode.effect = false;
+        hookNode.__pendingEffect = false;
       });
     }
   }
@@ -3956,6 +4071,7 @@ var MyReactHookNode = /*#__PURE__*/function (_MyReactInternalInsta) {
         if (!newDepArray) {
           this.value = newValue;
           this.reducer = newReducer || this.reducer;
+          this.depArray = newDepArray;
           this.effect = true;
         } else if (!(0, _tool.isNormalEqual)(this.depArray, newDepArray)) {
           this.value = newValue;
@@ -4149,6 +4265,7 @@ var _client = require("./dom/client.js");
 var prepareFiberDom = function prepareFiberDom(fiber) {
   fiber.dom = fiber.dom || (0, _client.createBrowserDom)(fiber);
   fiber.applyRef();
+  fiber.applyVDom();
 };
 /**
  *
@@ -4206,12 +4323,7 @@ var append = function append(fiber, parentDom) {
 var getPlainNodeDom = function getPlainNodeDom(fiber) {
   if (fiber) {
     if (fiber.__isPortal__) return null;
-
-    if (fiber.__isPlainNode__ || fiber.__isTextNode__) {
-      prepareFiberDom(fiber);
-      return fiber.dom;
-    }
-
+    if (fiber.__isPlainNode__ || fiber.__isTextNode__) return fiber.dom;
     return getPlainNodeDom(fiber.child);
   } else {
     return null;
@@ -4256,13 +4368,7 @@ var getInsertBeforeDomFromSiblingAndParent = function getInsertBeforeDomFromSibl
 
 var getParentFiberWithDom = function getParentFiberWithDom(fiber) {
   if (!fiber) return _env.rootFiber.current;
-  if (fiber.__isPortal__) return fiber;
-
-  if (fiber.__isPlainNode__ || fiber.__isTextNode__) {
-    prepareFiberDom(fiber);
-    return fiber;
-  }
-
+  if (fiber.__isPortal__ || fiber.__isPlainNode__ || fiber.__isTextNode__) return fiber;
   return getParentFiberWithDom(fiber.fiberParent);
 };
 /**
@@ -4283,6 +4389,7 @@ var commitPosition = function commitPosition(fiber) {
       var childFiber = children[i];
 
       if (childFiber.__diffMount__) {
+        // can not create before dom
         var beforeDom = getInsertBeforeDomFromSiblingAndParent(childFiber, parentFiberWithDom);
 
         if (beforeDom) {
@@ -4888,8 +4995,494 @@ var IS_SINGLE_ELEMENT = {
   param: true,
   meta: true,
   link: true
-};
+}; // from ReactDOM  TODO
+
 exports.IS_SINGLE_ELEMENT = IS_SINGLE_ELEMENT;
+var possibleStandardNames = {
+  // HTML
+  accept: 'accept',
+  acceptcharset: 'acceptCharset',
+  'accept-charset': 'acceptCharset',
+  accesskey: 'accessKey',
+  action: 'action',
+  allowfullscreen: 'allowFullScreen',
+  alt: 'alt',
+  as: 'as',
+  async: 'async',
+  autocapitalize: 'autoCapitalize',
+  autocomplete: 'autoComplete',
+  autocorrect: 'autoCorrect',
+  autofocus: 'autoFocus',
+  autoplay: 'autoPlay',
+  autosave: 'autoSave',
+  capture: 'capture',
+  cellpadding: 'cellPadding',
+  cellspacing: 'cellSpacing',
+  challenge: 'challenge',
+  charset: 'charSet',
+  checked: 'checked',
+  children: 'children',
+  cite: 'cite',
+  "class": 'className',
+  classid: 'classID',
+  classname: 'className',
+  cols: 'cols',
+  colspan: 'colSpan',
+  content: 'content',
+  contenteditable: 'contentEditable',
+  contextmenu: 'contextMenu',
+  controls: 'controls',
+  controlslist: 'controlsList',
+  coords: 'coords',
+  crossorigin: 'crossOrigin',
+  dangerouslysetinnerhtml: 'dangerouslySetInnerHTML',
+  data: 'data',
+  datetime: 'dateTime',
+  "default": 'default',
+  defaultchecked: 'defaultChecked',
+  defaultvalue: 'defaultValue',
+  defer: 'defer',
+  dir: 'dir',
+  disabled: 'disabled',
+  disablepictureinpicture: 'disablePictureInPicture',
+  download: 'download',
+  draggable: 'draggable',
+  enctype: 'encType',
+  "for": 'htmlFor',
+  form: 'form',
+  formmethod: 'formMethod',
+  formaction: 'formAction',
+  formenctype: 'formEncType',
+  formnovalidate: 'formNoValidate',
+  formtarget: 'formTarget',
+  frameborder: 'frameBorder',
+  headers: 'headers',
+  height: 'height',
+  hidden: 'hidden',
+  high: 'high',
+  href: 'href',
+  hreflang: 'hrefLang',
+  htmlfor: 'htmlFor',
+  httpequiv: 'httpEquiv',
+  'http-equiv': 'httpEquiv',
+  icon: 'icon',
+  id: 'id',
+  innerhtml: 'innerHTML',
+  inputmode: 'inputMode',
+  integrity: 'integrity',
+  is: 'is',
+  itemid: 'itemID',
+  itemprop: 'itemProp',
+  itemref: 'itemRef',
+  itemscope: 'itemScope',
+  itemtype: 'itemType',
+  keyparams: 'keyParams',
+  keytype: 'keyType',
+  kind: 'kind',
+  label: 'label',
+  lang: 'lang',
+  list: 'list',
+  loop: 'loop',
+  low: 'low',
+  manifest: 'manifest',
+  marginwidth: 'marginWidth',
+  marginheight: 'marginHeight',
+  max: 'max',
+  maxlength: 'maxLength',
+  media: 'media',
+  mediagroup: 'mediaGroup',
+  method: 'method',
+  min: 'min',
+  minlength: 'minLength',
+  multiple: 'multiple',
+  muted: 'muted',
+  name: 'name',
+  nomodule: 'noModule',
+  nonce: 'nonce',
+  novalidate: 'noValidate',
+  open: 'open',
+  optimum: 'optimum',
+  pattern: 'pattern',
+  placeholder: 'placeholder',
+  playsinline: 'playsInline',
+  poster: 'poster',
+  preload: 'preload',
+  profile: 'profile',
+  radiogroup: 'radioGroup',
+  readonly: 'readOnly',
+  referrerpolicy: 'referrerPolicy',
+  rel: 'rel',
+  required: 'required',
+  reversed: 'reversed',
+  role: 'role',
+  rows: 'rows',
+  rowspan: 'rowSpan',
+  sandbox: 'sandbox',
+  scope: 'scope',
+  scoped: 'scoped',
+  scrolling: 'scrolling',
+  seamless: 'seamless',
+  selected: 'selected',
+  shape: 'shape',
+  size: 'size',
+  sizes: 'sizes',
+  span: 'span',
+  spellcheck: 'spellCheck',
+  src: 'src',
+  srcdoc: 'srcDoc',
+  srclang: 'srcLang',
+  srcset: 'srcSet',
+  start: 'start',
+  step: 'step',
+  style: 'style',
+  summary: 'summary',
+  tabindex: 'tabIndex',
+  target: 'target',
+  title: 'title',
+  type: 'type',
+  usemap: 'useMap',
+  value: 'value',
+  width: 'width',
+  wmode: 'wmode',
+  wrap: 'wrap',
+  // SVG
+  about: 'about',
+  accentheight: 'accentHeight',
+  'accent-height': 'accentHeight',
+  accumulate: 'accumulate',
+  additive: 'additive',
+  alignmentbaseline: 'alignmentBaseline',
+  'alignment-baseline': 'alignmentBaseline',
+  allowreorder: 'allowReorder',
+  alphabetic: 'alphabetic',
+  amplitude: 'amplitude',
+  arabicform: 'arabicForm',
+  'arabic-form': 'arabicForm',
+  ascent: 'ascent',
+  attributename: 'attributeName',
+  attributetype: 'attributeType',
+  autoreverse: 'autoReverse',
+  azimuth: 'azimuth',
+  basefrequency: 'baseFrequency',
+  baselineshift: 'baselineShift',
+  'baseline-shift': 'baselineShift',
+  baseprofile: 'baseProfile',
+  bbox: 'bbox',
+  begin: 'begin',
+  bias: 'bias',
+  by: 'by',
+  calcmode: 'calcMode',
+  capheight: 'capHeight',
+  'cap-height': 'capHeight',
+  clip: 'clip',
+  clippath: 'clipPath',
+  'clip-path': 'clipPath',
+  clippathunits: 'clipPathUnits',
+  cliprule: 'clipRule',
+  'clip-rule': 'clipRule',
+  color: 'color',
+  colorinterpolation: 'colorInterpolation',
+  'color-interpolation': 'colorInterpolation',
+  colorinterpolationfilters: 'colorInterpolationFilters',
+  'color-interpolation-filters': 'colorInterpolationFilters',
+  colorprofile: 'colorProfile',
+  'color-profile': 'colorProfile',
+  colorrendering: 'colorRendering',
+  'color-rendering': 'colorRendering',
+  contentscripttype: 'contentScriptType',
+  contentstyletype: 'contentStyleType',
+  cursor: 'cursor',
+  cx: 'cx',
+  cy: 'cy',
+  d: 'd',
+  datatype: 'datatype',
+  decelerate: 'decelerate',
+  descent: 'descent',
+  diffuseconstant: 'diffuseConstant',
+  direction: 'direction',
+  display: 'display',
+  divisor: 'divisor',
+  dominantbaseline: 'dominantBaseline',
+  'dominant-baseline': 'dominantBaseline',
+  dur: 'dur',
+  dx: 'dx',
+  dy: 'dy',
+  edgemode: 'edgeMode',
+  elevation: 'elevation',
+  enablebackground: 'enableBackground',
+  'enable-background': 'enableBackground',
+  end: 'end',
+  exponent: 'exponent',
+  externalresourcesrequired: 'externalResourcesRequired',
+  fill: 'fill',
+  fillopacity: 'fillOpacity',
+  'fill-opacity': 'fillOpacity',
+  fillrule: 'fillRule',
+  'fill-rule': 'fillRule',
+  filter: 'filter',
+  filterres: 'filterRes',
+  filterunits: 'filterUnits',
+  floodopacity: 'floodOpacity',
+  'flood-opacity': 'floodOpacity',
+  floodcolor: 'floodColor',
+  'flood-color': 'floodColor',
+  focusable: 'focusable',
+  fontfamily: 'fontFamily',
+  'font-family': 'fontFamily',
+  fontsize: 'fontSize',
+  'font-size': 'fontSize',
+  fontsizeadjust: 'fontSizeAdjust',
+  'font-size-adjust': 'fontSizeAdjust',
+  fontstretch: 'fontStretch',
+  'font-stretch': 'fontStretch',
+  fontstyle: 'fontStyle',
+  'font-style': 'fontStyle',
+  fontvariant: 'fontVariant',
+  'font-variant': 'fontVariant',
+  fontweight: 'fontWeight',
+  'font-weight': 'fontWeight',
+  format: 'format',
+  from: 'from',
+  fx: 'fx',
+  fy: 'fy',
+  g1: 'g1',
+  g2: 'g2',
+  glyphname: 'glyphName',
+  'glyph-name': 'glyphName',
+  glyphorientationhorizontal: 'glyphOrientationHorizontal',
+  'glyph-orientation-horizontal': 'glyphOrientationHorizontal',
+  glyphorientationvertical: 'glyphOrientationVertical',
+  'glyph-orientation-vertical': 'glyphOrientationVertical',
+  glyphref: 'glyphRef',
+  gradienttransform: 'gradientTransform',
+  gradientunits: 'gradientUnits',
+  hanging: 'hanging',
+  horizadvx: 'horizAdvX',
+  'horiz-adv-x': 'horizAdvX',
+  horizoriginx: 'horizOriginX',
+  'horiz-origin-x': 'horizOriginX',
+  ideographic: 'ideographic',
+  imagerendering: 'imageRendering',
+  'image-rendering': 'imageRendering',
+  in2: 'in2',
+  "in": 'in',
+  inlist: 'inlist',
+  intercept: 'intercept',
+  k1: 'k1',
+  k2: 'k2',
+  k3: 'k3',
+  k4: 'k4',
+  k: 'k',
+  kernelmatrix: 'kernelMatrix',
+  kernelunitlength: 'kernelUnitLength',
+  kerning: 'kerning',
+  keypoints: 'keyPoints',
+  keysplines: 'keySplines',
+  keytimes: 'keyTimes',
+  lengthadjust: 'lengthAdjust',
+  letterspacing: 'letterSpacing',
+  'letter-spacing': 'letterSpacing',
+  lightingcolor: 'lightingColor',
+  'lighting-color': 'lightingColor',
+  limitingconeangle: 'limitingConeAngle',
+  local: 'local',
+  markerend: 'markerEnd',
+  'marker-end': 'markerEnd',
+  markerheight: 'markerHeight',
+  markermid: 'markerMid',
+  'marker-mid': 'markerMid',
+  markerstart: 'markerStart',
+  'marker-start': 'markerStart',
+  markerunits: 'markerUnits',
+  markerwidth: 'markerWidth',
+  mask: 'mask',
+  maskcontentunits: 'maskContentUnits',
+  maskunits: 'maskUnits',
+  mathematical: 'mathematical',
+  mode: 'mode',
+  numoctaves: 'numOctaves',
+  offset: 'offset',
+  opacity: 'opacity',
+  operator: 'operator',
+  order: 'order',
+  orient: 'orient',
+  orientation: 'orientation',
+  origin: 'origin',
+  overflow: 'overflow',
+  overlineposition: 'overlinePosition',
+  'overline-position': 'overlinePosition',
+  overlinethickness: 'overlineThickness',
+  'overline-thickness': 'overlineThickness',
+  paintorder: 'paintOrder',
+  'paint-order': 'paintOrder',
+  panose1: 'panose1',
+  'panose-1': 'panose1',
+  pathlength: 'pathLength',
+  patterncontentunits: 'patternContentUnits',
+  patterntransform: 'patternTransform',
+  patternunits: 'patternUnits',
+  pointerevents: 'pointerEvents',
+  'pointer-events': 'pointerEvents',
+  points: 'points',
+  pointsatx: 'pointsAtX',
+  pointsaty: 'pointsAtY',
+  pointsatz: 'pointsAtZ',
+  prefix: 'prefix',
+  preservealpha: 'preserveAlpha',
+  preserveaspectratio: 'preserveAspectRatio',
+  primitiveunits: 'primitiveUnits',
+  property: 'property',
+  r: 'r',
+  radius: 'radius',
+  refx: 'refX',
+  refy: 'refY',
+  renderingintent: 'renderingIntent',
+  'rendering-intent': 'renderingIntent',
+  repeatcount: 'repeatCount',
+  repeatdur: 'repeatDur',
+  requiredextensions: 'requiredExtensions',
+  requiredfeatures: 'requiredFeatures',
+  resource: 'resource',
+  restart: 'restart',
+  result: 'result',
+  results: 'results',
+  rotate: 'rotate',
+  rx: 'rx',
+  ry: 'ry',
+  scale: 'scale',
+  security: 'security',
+  seed: 'seed',
+  shaperendering: 'shapeRendering',
+  'shape-rendering': 'shapeRendering',
+  slope: 'slope',
+  spacing: 'spacing',
+  specularconstant: 'specularConstant',
+  specularexponent: 'specularExponent',
+  speed: 'speed',
+  spreadmethod: 'spreadMethod',
+  startoffset: 'startOffset',
+  stddeviation: 'stdDeviation',
+  stemh: 'stemh',
+  stemv: 'stemv',
+  stitchtiles: 'stitchTiles',
+  stopcolor: 'stopColor',
+  'stop-color': 'stopColor',
+  stopopacity: 'stopOpacity',
+  'stop-opacity': 'stopOpacity',
+  strikethroughposition: 'strikethroughPosition',
+  'strikethrough-position': 'strikethroughPosition',
+  strikethroughthickness: 'strikethroughThickness',
+  'strikethrough-thickness': 'strikethroughThickness',
+  string: 'string',
+  stroke: 'stroke',
+  strokedasharray: 'strokeDasharray',
+  'stroke-dasharray': 'strokeDasharray',
+  strokedashoffset: 'strokeDashoffset',
+  'stroke-dashoffset': 'strokeDashoffset',
+  strokelinecap: 'strokeLinecap',
+  'stroke-linecap': 'strokeLinecap',
+  strokelinejoin: 'strokeLinejoin',
+  'stroke-linejoin': 'strokeLinejoin',
+  strokemiterlimit: 'strokeMiterlimit',
+  'stroke-miterlimit': 'strokeMiterlimit',
+  strokewidth: 'strokeWidth',
+  'stroke-width': 'strokeWidth',
+  strokeopacity: 'strokeOpacity',
+  'stroke-opacity': 'strokeOpacity',
+  suppresscontenteditablewarning: 'suppressContentEditableWarning',
+  suppresshydrationwarning: 'suppressHydrationWarning',
+  surfacescale: 'surfaceScale',
+  systemlanguage: 'systemLanguage',
+  tablevalues: 'tableValues',
+  targetx: 'targetX',
+  targety: 'targetY',
+  textanchor: 'textAnchor',
+  'text-anchor': 'textAnchor',
+  textdecoration: 'textDecoration',
+  'text-decoration': 'textDecoration',
+  textlength: 'textLength',
+  textrendering: 'textRendering',
+  'text-rendering': 'textRendering',
+  to: 'to',
+  transform: 'transform',
+  "typeof": 'typeof',
+  u1: 'u1',
+  u2: 'u2',
+  underlineposition: 'underlinePosition',
+  'underline-position': 'underlinePosition',
+  underlinethickness: 'underlineThickness',
+  'underline-thickness': 'underlineThickness',
+  unicode: 'unicode',
+  unicodebidi: 'unicodeBidi',
+  'unicode-bidi': 'unicodeBidi',
+  unicoderange: 'unicodeRange',
+  'unicode-range': 'unicodeRange',
+  unitsperem: 'unitsPerEm',
+  'units-per-em': 'unitsPerEm',
+  unselectable: 'unselectable',
+  valphabetic: 'vAlphabetic',
+  'v-alphabetic': 'vAlphabetic',
+  values: 'values',
+  vectoreffect: 'vectorEffect',
+  'vector-effect': 'vectorEffect',
+  version: 'version',
+  vertadvy: 'vertAdvY',
+  'vert-adv-y': 'vertAdvY',
+  vertoriginx: 'vertOriginX',
+  'vert-origin-x': 'vertOriginX',
+  vertoriginy: 'vertOriginY',
+  'vert-origin-y': 'vertOriginY',
+  vhanging: 'vHanging',
+  'v-hanging': 'vHanging',
+  videographic: 'vIdeographic',
+  'v-ideographic': 'vIdeographic',
+  viewbox: 'viewBox',
+  viewtarget: 'viewTarget',
+  visibility: 'visibility',
+  vmathematical: 'vMathematical',
+  'v-mathematical': 'vMathematical',
+  vocab: 'vocab',
+  widths: 'widths',
+  wordspacing: 'wordSpacing',
+  'word-spacing': 'wordSpacing',
+  writingmode: 'writingMode',
+  'writing-mode': 'writingMode',
+  x1: 'x1',
+  x2: 'x2',
+  x: 'x',
+  xchannelselector: 'xChannelSelector',
+  xheight: 'xHeight',
+  'x-height': 'xHeight',
+  xlinkactuate: 'xlinkActuate',
+  'xlink:actuate': 'xlinkActuate',
+  xlinkarcrole: 'xlinkArcrole',
+  'xlink:arcrole': 'xlinkArcrole',
+  xlinkhref: 'xlinkHref',
+  'xlink:href': 'xlinkHref',
+  xlinkrole: 'xlinkRole',
+  'xlink:role': 'xlinkRole',
+  xlinkshow: 'xlinkShow',
+  'xlink:show': 'xlinkShow',
+  xlinktitle: 'xlinkTitle',
+  'xlink:title': 'xlinkTitle',
+  xlinktype: 'xlinkType',
+  'xlink:type': 'xlinkType',
+  xmlbase: 'xmlBase',
+  'xml:base': 'xmlBase',
+  xmllang: 'xmlLang',
+  'xml:lang': 'xmlLang',
+  xmlns: 'xmlns',
+  'xml:space': 'xmlSpace',
+  xmlnsxlink: 'xmlnsXlink',
+  'xmlns:xlink': 'xmlnsXlink',
+  xmlspace: 'xmlSpace',
+  y1: 'y1',
+  y2: 'y2',
+  y: 'y',
+  ychannelselector: 'yChannelSelector',
+  z: 'z',
+  zoomandpan: 'zoomAndPan'
+};
 var EMPTY_ARRAY = [];
 exports.EMPTY_ARRAY = EMPTY_ARRAY;
 var EMPTY_OBJECT = {};
@@ -5199,7 +5792,7 @@ var MyReactInternalInstance = /*#__PURE__*/function () {
       if (_env.enableAllCheck.current) {
         var now = new Date().getTime();
 
-        if (now - this.__updateTimeStep__ <= 8) {
+        if (now - this.__updateTimeStep__ <= 2) {
           this.__hecticCount__ += 1;
         } else {
           this.__hecticCount__ = 0;
@@ -5378,6 +5971,8 @@ exports.shouldYieldAsyncUpdate = shouldYieldAsyncUpdate;
 var cannotUpdate = function cannotUpdate() {
   if (_env.isServerRender.current) throw new Error("can not update component during SSR");
   if (_env.isHydrateRender.current) throw new Error("can not update component during hydrate");
+  if (typeof window === 'undefined') return false;
+  return true;
 };
 
 exports.cannotUpdate = cannotUpdate;
@@ -5557,20 +6152,22 @@ var asyncUpdate = function asyncUpdate() {
 
 
 var pendingUpdate = function pendingUpdate(fiber) {
-  (0, _tool.cannotUpdate)();
+  var canUpdate = (0, _tool.cannotUpdate)();
 
-  if (!fiber.__needUpdate__) {
-    fiber.__needUpdate__ = true;
-    fiber.fiberAlternate = fiber;
+  if (canUpdate) {
+    if (!fiber.__needUpdate__) {
+      fiber.__needUpdate__ = true;
+      fiber.fiberAlternate = fiber;
 
-    if (_env.enableAsyncUpdate.current) {
-      _env.pendingAsyncModifyFiberArray.current.pushValue(fiber);
-    } else {
-      _env.pendingSyncModifyFiberArray.current.push(fiber);
+      if (_env.enableAsyncUpdate.current) {
+        _env.pendingAsyncModifyFiberArray.current.pushValue(fiber);
+      } else {
+        _env.pendingSyncModifyFiberArray.current.push(fiber);
+      }
     }
-  }
 
-  asyncUpdate();
+    asyncUpdate();
+  }
 };
 
 exports.pendingUpdate = pendingUpdate;
