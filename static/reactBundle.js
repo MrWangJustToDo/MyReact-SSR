@@ -521,7 +521,7 @@ exports.MyReactPureComponent = MyReactPureComponent;
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.nextWorkCommon = exports.nextWork = void 0;
+exports.nextWorkCommon = exports.nextWorkAsync = exports.nextWork = void 0;
 
 var _index = require("../component/index.js");
 
@@ -717,8 +717,39 @@ var nextWork = function nextWork(fiber) {
   _env.currentRunningFiber.current = null;
   return children;
 };
+/**
+ *
+ * @param {MyReactFiberNode} fiber
+ * @returns {MyReactFiberNode}
+ */
+
 
 exports.nextWork = nextWork;
+
+var nextWorkAsync = function nextWorkAsync(fiber) {
+  var liveFiber = fiber.__newestFiber__.current;
+  _env.currentRunningFiber.current = liveFiber;
+  var children = [];
+  if (liveFiber.__isDynamicNode__) children = nextWorkComponent(liveFiber);else if (liveFiber.__isObjectNode__) children = nextWorkObject(liveFiber);else if (!liveFiber.__isTextNode__) children = nextWorkCommon(liveFiber);
+  liveFiber.afterTransform();
+  _env.currentRunningFiber.current = null; // get next working fiber
+
+  if (children.length) {
+    return liveFiber.child;
+  }
+
+  var nextFiber = liveFiber;
+
+  while (nextFiber && nextFiber !== _env.pendingAsyncModifyTopLevelFiber.current) {
+    if (nextFiber.fiberSibling) {
+      return nextFiber.fiberSibling;
+    }
+
+    nextFiber = nextFiber.fiberParent;
+  }
+};
+
+exports.nextWorkAsync = nextWorkAsync;
 },{"../component/index.js":3,"../env.js":19,"../fiber/index.js":21,"./tool.js":7}],6:[function(require,module,exports){
 "use strict";
 
@@ -729,6 +760,12 @@ Object.defineProperty(exports, "nextWork", {
   enumerable: true,
   get: function get() {
     return _feature.nextWork;
+  }
+});
+Object.defineProperty(exports, "nextWorkAsync", {
+  enumerable: true,
+  get: function get() {
+    return _feature.nextWorkAsync;
   }
 });
 Object.defineProperty(exports, "nextWorkCommon", {
@@ -932,7 +969,7 @@ var getNewFiberWithUpdate = function getNewFiberWithUpdate(newVDom, parentFiber,
 
 var transformChildrenFiber = function transformChildrenFiber(parentFiber, children) {
   var index = 0;
-  var isNewChildren = Boolean(!parentFiber.fiberAlternate);
+  var isNewChildren = Boolean(!parentFiber.__updateRender__);
   var vdomChildren = Array.isArray(children) ? children : [children];
   var previousRenderChildren = isNewChildren ? [] : parentFiber.__renderedChildren__;
   var assignPreviousRenderChildren = getMatchedRenderChildren(vdomChildren, previousRenderChildren);
@@ -947,8 +984,7 @@ var transformChildrenFiber = function transformChildrenFiber(parentFiber, childr
     parentFiber.__renderedChildren__.push(newFiber);
 
     index++;
-  } // parentFiber.afterTransform();
-
+  }
 
   return parentFiber.children;
 };
@@ -1835,7 +1871,7 @@ var TextElement = /*#__PURE__*/function () {
   function TextElement(content) {
     _classCallCheck(this, TextElement);
 
-    this.content = content || " ";
+    this.content = content === "" ? " " : content;
   }
 
   _createClass(TextElement, [{
@@ -2170,13 +2206,11 @@ var updateDom = function updateDom(element, oldProps, newProps, fiber) {
       fiber.addEventListener(eventName, newProps[key], isCapture);
     });
     Object.keys(newProps).filter(_prop.isProperty).filter((0, _prop.isNew)(oldProps, newProps)).forEach(function (key) {
-      if (newProps[key] === undefined || newProps[key] === null || newProps[key] === false) return;
-
       if (key === "className") {
         if (fiber.nameSpace) {
-          element.setAttribute("class", newProps[key]);
+          element.setAttribute("class", newProps[key] || "");
         } else {
-          element[key] = newProps[key];
+          element[key] = newProps[key] || "";
         }
       } else if (key === "autofocus" || key === "autoFocus") {
         if (newProps[key]) {
@@ -2188,7 +2222,11 @@ var updateDom = function updateDom(element, oldProps, newProps, fiber) {
       } else if (key === "value") {
         element[key] = newProps[key];
       } else {
-        element.setAttribute(key, newProps[key]);
+        if (newProps[key] !== null && newProps[key] !== undefined && newProps[key] !== false) {
+          element.setAttribute(key, newProps[key]);
+        } else {
+          element.removeAttribute(key);
+        }
       }
     });
     Object.keys(newProps).filter(_prop.isStyle).forEach(function (styleKey) {
@@ -2417,11 +2455,11 @@ function memo(MemoRender) {
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.rootFiber = exports.rootContainer = exports.pendingUpdateFiberArray = exports.pendingUnmountFiberArray = exports.pendingSyncModifyFiberArray = exports.pendingPositionFiberArray = exports.pendingMountFiberArray = exports.pendingLayoutEffectArray = exports.pendingEffectArray = exports.pendingAsyncModifyFiberArray = exports.nextTransformFiberArray = exports.isServerRender = exports.isMounted = exports.isHydrateRender = exports.globalLoop = exports.enableKeyDiff = exports.enableHighLight = exports.enableEventSystem = exports.enableDebugLog = exports.enableControlComponent = exports.enableAsyncUpdate = exports.enableAllCheck = exports.currentTransformFiberArray = exports.currentRunningFiber = exports.currentHookDeepIndex = exports.currentFunctionFiber = exports.asyncUpdateTimeStep = exports.asyncUpdateTimeLimit = void 0;
+exports.rootFiber = exports.rootContainer = exports.pendingUpdateFiberArray = exports.pendingUnmountFiberArray = exports.pendingSyncModifyFiberArray = exports.pendingPositionFiberArray = exports.pendingMountFiberArray = exports.pendingLayoutEffectArray = exports.pendingEffectArray = exports.pendingAsyncModifyTopLevelFiber = exports.pendingAsyncModifyFiberArray = exports.pendingAsyncModifyFiber = exports.nextTransformFiberArray = exports.isServerRender = exports.isMounted = exports.isHydrateRender = exports.globalLoop = exports.enableKeyDiff = exports.enableHighLight = exports.enableEventSystem = exports.enableDebugLog = exports.enableControlComponent = exports.enableAsyncUpdate = exports.enableAllCheck = exports.currentTransformFiberArray = exports.currentRunningFiber = exports.currentHookDeepIndex = exports.currentFunctionFiber = exports.asyncUpdateTimeStep = exports.asyncUpdateTimeLimit = void 0;
 
 var _share = require("./share.js");
 
-var asyncUpdateTimeLimit = 14;
+var asyncUpdateTimeLimit = 18;
 exports.asyncUpdateTimeLimit = asyncUpdateTimeLimit;
 var globalLoop = (0, _share.createRef)(false);
 exports.globalLoop = globalLoop;
@@ -2472,6 +2510,10 @@ var pendingSyncModifyFiberArray = (0, _share.createRef)([]);
 exports.pendingSyncModifyFiberArray = pendingSyncModifyFiberArray;
 var pendingAsyncModifyFiberArray = (0, _share.createRef)(_share.SORT_BY_DEEP_HEAP);
 exports.pendingAsyncModifyFiberArray = pendingAsyncModifyFiberArray;
+var pendingAsyncModifyTopLevelFiber = (0, _share.createRef)(null);
+exports.pendingAsyncModifyTopLevelFiber = pendingAsyncModifyTopLevelFiber;
+var pendingAsyncModifyFiber = (0, _share.createRef)(null);
+exports.pendingAsyncModifyFiber = pendingAsyncModifyFiber;
 var pendingMountFiberArray = (0, _share.createRef)([]);
 exports.pendingMountFiberArray = pendingMountFiberArray;
 var pendingUpdateFiberArray = (0, _share.createRef)([]);
@@ -2798,6 +2840,7 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
       __renderedChildren__: [],
       __renderedCount__: 1,
       __renderDynamic__: false,
+      __updateRender__: false,
       __updateTimeStep__: Date.now(),
       __lastUpdateTimeStep__: null,
       __newestFiber__: (0, _share.createRef)(_assertThisInitialized(_this))
@@ -2842,6 +2885,14 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
     },
     set: function set(v) {
       this.__internal_node_diff__.__diffPrevRender__ = v;
+    }
+  }, {
+    key: "__updateRender__",
+    get: function get() {
+      return this.__internal_node_diff__.__updateRender__;
+    },
+    set: function set(v) {
+      this.__internal_node_diff__.__updateRender__ = v;
     }
   }, {
     key: "__renderedCount__",
@@ -3247,8 +3298,9 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
           // fiberAlternate.__internal_event_state__ = null;
         }
 
-        this.__renderedCount__ = fiberAlternate.__renderedCount__ + 1;
+        this.__updateRender__ = true;
         this.__newestFiber__.current = this;
+        this.__renderedCount__ = fiberAlternate.__renderedCount__ + 1;
       }
     }
   }, {
@@ -3327,6 +3379,13 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
           fiber: this
         });
       }
+    }
+  }, {
+    key: "prepareUpdate",
+    value: function prepareUpdate() {
+      this.__needUpdate__ = true;
+      this.__updateRender__ = true;
+      this.fiberAlternate = this;
     }
   }, {
     key: "memoChildren",
@@ -3496,7 +3555,7 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
         if (this.dom) {
           var ref = this.__vdom__.ref;
 
-          if (_typeof(ref) === "object") {
+          if (_typeof(ref) === "object" && ref !== null) {
             ref.current = this.dom;
           } else if (typeof ref === "function") {
             ref.call(null, this.dom);
@@ -3706,8 +3765,7 @@ var getHookNode = function getHookNode(fiber, hookIndex, value, reducer, depArra
 
     currentHook.setFiber(fiber);
     currentHook.updateResult(value, reducer, depArray);
-  } else if (!fiber.fiberAlternate) {
-    // still have fiberAlternate props during function run
+  } else if (!fiber.__updateRender__) {
     currentHook = createHookNode({
       hookIndex: hookIndex,
       hookType: hookType,
@@ -4820,9 +4878,9 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.renderLoopSync = exports.renderLoopAsync = void 0;
 
-var _index = require("../core/index.js");
+var _index = require("../fiber/index.js");
 
-var _index2 = require("../fiber/index.js");
+var _index2 = require("../core/index.js");
 
 var _env = require("../env.js");
 
@@ -4845,7 +4903,7 @@ function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len 
 var transformStart = function transformStart(fiber) {
   var _currentTransformFibe;
 
-  (_currentTransformFibe = _env.currentTransformFiberArray.current).push.apply(_currentTransformFibe, _toConsumableArray((0, _index.nextWork)(fiber)));
+  (_currentTransformFibe = _env.currentTransformFiberArray.current).push.apply(_currentTransformFibe, _toConsumableArray((0, _index2.nextWork)(fiber)));
 };
 
 var transformCurrent = function transformCurrent() {
@@ -4854,7 +4912,7 @@ var transformCurrent = function transformCurrent() {
 
     var fiber = _env.currentTransformFiberArray.current.shift();
 
-    (_nextTransformFiberAr = _env.nextTransformFiberArray.current).push.apply(_nextTransformFiberAr, _toConsumableArray((0, _index.nextWork)(fiber)));
+    (_nextTransformFiberAr = _env.nextTransformFiberArray.current).push.apply(_nextTransformFiberAr, _toConsumableArray((0, _index2.nextWork)(fiber)));
   }
 };
 
@@ -4864,7 +4922,7 @@ var transformNext = function transformNext() {
 
     var fiber = _env.nextTransformFiberArray.current.shift();
 
-    (_currentTransformFibe2 = _env.currentTransformFiberArray.current).push.apply(_currentTransformFibe2, _toConsumableArray((0, _index.nextWork)(fiber)));
+    (_currentTransformFibe2 = _env.currentTransformFiberArray.current).push.apply(_currentTransformFibe2, _toConsumableArray((0, _index2.nextWork)(fiber)));
   }
 };
 
@@ -4888,7 +4946,9 @@ var renderLoopSync = function renderLoopSync(fiber) {
 };
 /**
  *
- * @param {() => MyReactFiberNode} getNextFiber
+ * @param {{get: () => MyReactFiberNode, set: (nextFiber) => void}} pendingNext
+ * @param {() => boolean} shouldYield
+ * @param {(fiber: MyReactFiberNode) => void} pendingNext
  * @param {() => void} cb
  * @param {() => void} final
  */
@@ -4896,13 +4956,14 @@ var renderLoopSync = function renderLoopSync(fiber) {
 
 exports.renderLoopSync = renderLoopSync;
 
-var renderLoopAsync = function renderLoopAsync(getNextFiber, cb, _final) {
+var renderLoopAsync = function renderLoopAsync(pendingNext, shouldYield, cb, _final) {
   var count = 0;
-  var fiber = null;
+  var fiber = pendingNext.get();
 
-  while (fiber = getNextFiber()) {
+  while (fiber && !shouldYield()) {
     count++;
-    renderLoopSync(fiber);
+    fiber = (0, _index2.nextWorkAsync)(fiber);
+    pendingNext.set(fiber);
   }
 
   if (count) {
@@ -6131,8 +6192,6 @@ exports.pendingUpdate = void 0;
 
 var _debug = require("../debug.js");
 
-var _tool = require("../tool.js");
-
 var _unmount = require("../unmount.js");
 
 var _position = require("../position.js");
@@ -6140,6 +6199,8 @@ var _position = require("../position.js");
 var _index = require("../mount/index.js");
 
 var _index2 = require("../fiber/index.js");
+
+var _tool = require("../tool.js");
 
 var _index3 = require("../render/index.js");
 
@@ -6151,7 +6212,12 @@ var _effect = require("../effect.js");
 
 var updateAllAsync = function updateAllAsync() {
   _env.globalLoop.current = true;
-  (0, _index3.renderLoopAsync)(_tool2.getPendingModifyFiberNext, function () {
+  (0, _index3.renderLoopAsync)({
+    get: _tool2.getPendingModifyFiberNext,
+    set: function set(nextFiber) {
+      return _env.pendingAsyncModifyFiber.current = nextFiber;
+    }
+  }, _tool.shouldYieldAsyncUpdate, function () {
     (0, _position.runPosition)();
     (0, _index.runMount)();
     (0, _tool2.runUpdate)();
@@ -6206,8 +6272,7 @@ var pendingUpdate = function pendingUpdate(fiber) {
 
   if (canUpdate) {
     if (!fiber.__needUpdate__) {
-      fiber.__needUpdate__ = true;
-      fiber.fiberAlternate = fiber;
+      fiber.prepareUpdate();
 
       if (_env.enableAsyncUpdate.current) {
         _env.pendingAsyncModifyFiberArray.current.pushValue(fiber);
@@ -6287,8 +6352,6 @@ exports.runUpdate = exports.pushUpdate = exports.getPendingModifyFiberNext = exp
 
 var _env = require("../env.js");
 
-var _tool = require("../tool.js");
-
 var _index = require("../fiber/index.js");
 
 var _loop = require("./loop.js");
@@ -6310,16 +6373,26 @@ var getPendingModifyFiberArray = function getPendingModifyFiberArray() {
 exports.getPendingModifyFiberArray = getPendingModifyFiberArray;
 
 var getPendingModifyFiberNext = function getPendingModifyFiberNext() {
-  if ((0, _tool.shouldYieldAsyncUpdate)()) return null;
+  // when yield on pending
+  var fiber = _env.pendingAsyncModifyFiber.current;
+  _env.pendingAsyncModifyFiber.current = null;
+
+  if (fiber !== null && fiber !== void 0 && fiber.mount) {
+    return fiber;
+  } // update done, get next update
+
 
   while (_env.pendingAsyncModifyFiberArray.current.length) {
     var nextFiber = _env.pendingAsyncModifyFiberArray.current.popTop();
 
     if (nextFiber.mount && nextFiber.__needUpdate__) {
+      // should not update topLevel parent
+      _env.pendingAsyncModifyTopLevelFiber.current = nextFiber;
       return nextFiber;
     }
   }
 
+  _env.pendingAsyncModifyTopLevelFiber.current = null;
   return null;
 };
 /**
@@ -6359,7 +6432,7 @@ var runUpdate = function runUpdate() {
 };
 
 exports.runUpdate = runUpdate;
-},{"../debug.js":8,"../env.js":19,"../fiber/index.js":21,"../tool.js":39,"./loop.js":43}],45:[function(require,module,exports){
+},{"../debug.js":8,"../env.js":19,"../fiber/index.js":21,"./loop.js":43}],45:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {

@@ -1,7 +1,7 @@
 ## MyReact SSR test
 
-### `lib` folder build by `MyReact`
-### `reactBundle.js` build by `MyReact`
+### `lib` folder build by [MyReact](https://github.com/MrWangJustToDo/MyReact)
+### `reactBundle.js` build by [MyReact](https://github.com/MrWangJustToDo/MyReact)
 
 ##
 ```
