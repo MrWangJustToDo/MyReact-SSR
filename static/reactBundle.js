@@ -531,6 +531,8 @@ var _tool = require("./tool.js");
 
 var _index2 = require("../fiber/index.js");
 
+function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
+
 /**
  *
  * @param {MyReactFiberNode} fiber
@@ -606,7 +608,7 @@ var nextWorkMemo = function nextWorkMemo(fiber) {
         _render = _fiber$__vdom__$type.render,
         isMyReactForwardRefRender = _fiber$__vdom__$type.isMyReactForwardRefRender;
     var render = isMyReactForwardRefRender ? _render.render : _render;
-    var isClassComponent = (_render$prototype = render.prototype) === null || _render$prototype === void 0 ? void 0 : _render$prototype.isMyReactComponent;
+    var isClassComponent = render === null || render === void 0 ? void 0 : (_render$prototype = render.prototype) === null || _render$prototype === void 0 ? void 0 : _render$prototype.isMyReactComponent;
 
     if (isClassComponent) {
       return nextWorkClassComponent(fiber);
@@ -623,6 +625,46 @@ var nextWorkMemo = function nextWorkMemo(fiber) {
   } else {
     return [];
   }
+};
+/**
+ *
+ * @param {MyReactFiberNode} fiber
+ */
+
+
+var nextWorkLazy = function nextWorkLazy(fiber) {
+  var lazyObj = fiber.__vdom__.type; // lazy load done
+
+  if (lazyObj._loaded === true) {
+    var children = lazyObj._result;
+
+    if (typeof lazyObj._result === "function") {
+      _env.currentHookDeepIndex.current = 0;
+      _env.currentFunctionFiber.current = fiber;
+      children = lazyObj._result(fiber.__vdom__.props);
+      _env.currentFunctionFiber.current = null;
+      _env.currentHookDeepIndex.current = 0;
+    }
+
+    fiber.__vdom__.__dynamicChildren__ = children;
+    fiber.__renderDynamic__ = true;
+  } else {
+    if (!_env.isServerRender.current) {
+      Promise.resolve().then(function () {
+        return lazyObj.loader();
+      }).then(function (re) {
+        var render = _typeof(re) === "object" && re !== null && re !== void 0 && re["default"] ? re["default"] : re;
+        lazyObj._loaded = true;
+        lazyObj._result = render;
+        fiber.updateLazy();
+      });
+    }
+
+    fiber.__vdom__.__dynamicChildren__ = fiber.__fallback__;
+    fiber.__renderDynamic__ = true;
+  }
+
+  return nextWorkCommon(fiber);
 };
 /**
  *
@@ -697,7 +739,9 @@ var nextWorkConsumer = function nextWorkConsumer(fiber) {
 
 var nextWorkObject = function nextWorkObject(fiber) {
   if (fiber.__isMemo__) return nextWorkMemo(fiber);
+  if (fiber.__isLazy__) return nextWorkLazy(fiber);
   if (fiber.__isPortal__) return nextWorkCommon(fiber);
+  if (fiber.__isSuspense__) return nextWorkCommon(fiber);
   if (fiber.__isForwardRef__) return nextWorkForwardRef(fiber);
   if (fiber.__isContextProvider__) return nextWorkProvider(fiber);
   if (fiber.__isContextConsumer__) return nextWorkConsumer(fiber);
@@ -727,18 +771,21 @@ var nextWork = function nextWork(fiber) {
 exports.nextWork = nextWork;
 
 var nextWorkAsync = function nextWorkAsync(fiber) {
-  var liveFiber = fiber.__newestFiber__.current;
-  _env.currentRunningFiber.current = liveFiber;
+  if (!fiber.mount) return null;
+  _env.currentRunningFiber.current = fiber;
   var children = [];
-  if (liveFiber.__isDynamicNode__) children = nextWorkComponent(liveFiber);else if (liveFiber.__isObjectNode__) children = nextWorkObject(liveFiber);else if (!liveFiber.__isTextNode__) children = nextWorkCommon(liveFiber);
-  liveFiber.afterTransform();
-  _env.currentRunningFiber.current = null; // get next working fiber
+  if (fiber.__isDynamicNode__) children = nextWorkComponent(fiber);else if (fiber.__isObjectNode__) children = nextWorkObject(fiber);else if (!fiber.__isTextNode__) children = nextWorkCommon(fiber);
+  fiber.afterTransform();
+  _env.currentRunningFiber.current = null; // https://medium.com/react-in-depth/the-how-and-why-on-reacts-usage-of-linked-list-in-fiber-67f1014d0eb7
+  // https://github.com/facebook/react/issues/7942
+  // for this part of logic, just like fiber tree for React, support yield on a loop and can continue later
+  // get next working fiber
 
   if (children.length) {
-    return liveFiber.child;
+    return fiber.child;
   }
 
-  var nextFiber = liveFiber;
+  var nextFiber = fiber; // should not transform current loop top level fiber
 
   while (nextFiber && nextFiber !== _env.pendingAsyncModifyTopLevelFiber.current) {
     if (nextFiber.fiberSibling) {
@@ -1034,7 +1081,9 @@ var trackDevLog = function trackDevLog(fiber) {
 var getFiberNodeName = function getFiberNodeName(fiber) {
   if (fiber.__root__) return "<Root />".concat(trackDevLog(fiber));
   if (fiber.__isMemo__) return "<Memo />".concat(trackDevLog(fiber));
+  if (fiber.__isLazy__) return "<Lazy />".concat(trackDevLog(fiber));
   if (fiber.__isPortal__) return "<Portal />".concat(trackDevLog(fiber));
+  if (fiber.__isSuspense__) return "<Suspense />".concat(trackDevLog(fiber));
   if (fiber.__isEmptyNode__) return "<Empty />".concat(trackDevLog(fiber));
   if (fiber.__isForwardRef__) return "<ForwardRef />".concat(trackDevLog(fiber));
   if (fiber.__isFragmentNode__) return "<Fragment />".concat(trackDevLog(fiber));
@@ -2369,6 +2418,7 @@ Object.defineProperty(exports, "__esModule", {
 exports.createContext = createContext;
 exports.createPortal = createPortal;
 exports.forwardRef = forwardRef;
+exports.lazy = lazy;
 exports.memo = memo;
 
 var _share = require("./share.js");
@@ -2448,6 +2498,24 @@ function memo(MemoRender) {
     configurable: false
   });
   return MemoObject;
+}
+
+function lazy(loader) {
+  var LazyObject = {
+    type: _symbol.Lazy,
+    loader: loader,
+    _initial: true,
+    _loaded: false,
+    _result: null
+  };
+  Object.defineProperty(LazyObject, "isMyReactLazyComponent", {
+    get: function get() {
+      return true;
+    },
+    enumerable: false,
+    configurable: false
+  });
+  return LazyObject;
 }
 },{"./share.js":37,"./symbol.js":38,"./vdom/index.js":45}],19:[function(require,module,exports){
 "use strict";
@@ -2827,6 +2895,7 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
     _this = _super.call.apply(_super, [this].concat(args));
 
     _defineProperty(_assertThisInitialized(_this), "__internal_node_diff__", {
+      // for diff
       __diffMount__: false,
 
       /**
@@ -2838,8 +2907,11 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
        * @type MyReactFiberNode[]
        */
       __renderedChildren__: [],
+      // for log
       __renderedCount__: 1,
+      // for render
       __renderDynamic__: false,
+      // for diff core
       __updateRender__: false,
       __updateTimeStep__: Date.now(),
       __lastUpdateTimeStep__: null,
@@ -2865,6 +2937,10 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
        */
       __dependence__: [],
       __contextMap__: {}
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "__internal_suspense_state__", {
+      __fallback__: null
     });
 
     return _this;
@@ -3067,6 +3143,14 @@ var MyReactFiberInternal = /*#__PURE__*/function (_MyReactInternalType) {
         return n !== node;
       });
     }
+  }, {
+    key: "__fallback__",
+    get: function get() {
+      return this.__internal_suspense_state__.__fallback__;
+    },
+    set: function set(v) {
+      this.__internal_suspense_state__.__fallback__ = v;
+    }
   }]);
 
   return MyReactFiberInternal;
@@ -3229,6 +3313,13 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
 
         if (this.fiberParent.nameSpace) {
           this.nameSpace = this.fiberParent.nameSpace;
+        } // inherit suspense fallback
+
+
+        if (this.fiberParent.__isSuspense__) {
+          this.__fallback__ = this.fiberParent.memoProps.fallback;
+        } else {
+          this.__fallback__ = this.fiberParent.__fallback__;
         }
       }
     }
@@ -3283,7 +3374,8 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
           this.__newestFiber__ = fiberAlternate.__newestFiber__;
           this.__renderedChildren__ = fiberAlternate.__renderedChildren__.slice(0);
           this.__internal_node_type__ = Object.assign({}, fiberAlternate.__internal_node_type__);
-          this.__internal_event_state__ = Object.assign({}, fiberAlternate.__internal_event_state__); // update
+          this.__internal_event_state__ = Object.assign({}, fiberAlternate.__internal_event_state__);
+          this.__internal_suspense_state__ = Object.assign({}, fiberAlternate.__internal_suspense_state__); // update
           // fiberAlternate.dom = null;
           // fiberAlternate.hookList = [];
           // fiberAlternate.hookHead = null;
@@ -3318,6 +3410,7 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
       this.initial = false;
       this.fiberAlternate = null;
       this.__needUpdate__ = false;
+      this.__ignoreHook__ = false;
     }
     /**
      *
@@ -3378,6 +3471,14 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
           message: "can not update unmount fiber",
           fiber: this
         });
+      }
+    }
+  }, {
+    key: "updateLazy",
+    value: function updateLazy() {
+      if (this.mount) {
+        this.__ignoreHook__ = true;
+        (0, _index3.pendingUpdate)(this);
       }
     }
   }, {
@@ -3456,6 +3557,12 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
 
               if (typeof vdom.type.render === "function" && (_vdom$type$render$pro = vdom.type.render.prototype) !== null && _vdom$type$render$pro !== void 0 && _vdom$type$render$pro.isMyReactComponent) {
                 throw new Error("forwardRef need a function component, but get a class component");
+              }
+            }
+
+            if (this.__isSuspense__) {
+              if (this.__vdom__.children === undefined || this.__vdom__.children === null) {
+                throw new Error("Suspense component need a children to render");
               }
             }
 
@@ -3765,7 +3872,7 @@ var getHookNode = function getHookNode(fiber, hookIndex, value, reducer, depArra
 
     currentHook.setFiber(fiber);
     currentHook.updateResult(value, reducer, depArray);
-  } else if (!fiber.__updateRender__) {
+  } else if (!fiber.__updateRender__ || fiber.__ignoreHook__) {
     currentHook = createHookNode({
       hookIndex: hookIndex,
       hookType: hookType,
@@ -3779,7 +3886,7 @@ var getHookNode = function getHookNode(fiber, hookIndex, value, reducer, depArra
       hookIndex: hookIndex
     };
     temp.__fiber__ = fiber;
-    fiber.hookFoot.hookNext = temp;
+    fiber.hookFoot && (fiber.hookFoot.hookNext = temp);
     throw new Error((0, _debug.getHookTree)(temp, hookType));
   }
 
@@ -4581,6 +4688,12 @@ Object.defineProperty(exports, "Provider", {
   }
 });
 exports.PureComponent = void 0;
+Object.defineProperty(exports, "Suspense", {
+  enumerable: true,
+  get: function get() {
+    return _symbol.Suspense;
+  }
+});
 Object.defineProperty(exports, "cloneElement", {
   enumerable: true,
   get: function get() {
@@ -4634,6 +4747,12 @@ Object.defineProperty(exports, "isValidElement", {
   enumerable: true,
   get: function get() {
     return _index.isValidElement;
+  }
+});
+Object.defineProperty(exports, "lazy", {
+  enumerable: true,
+  get: function get() {
+    return _element.lazy;
   }
 });
 Object.defineProperty(exports, "memo", {
@@ -4793,7 +4912,10 @@ var React = {
   useLayoutEffect: _index4.useLayoutEffect,
   useImperativeHandle: _index4.useImperativeHandle,
   // children api
-  Children: Children
+  Children: Children,
+  // split chunk
+  lazy: _element.lazy,
+  Suspense: _symbol.Suspense
 };
 globalThis.React = React;
 globalThis.ReactDOM = ReactDOM;
@@ -4877,6 +4999,8 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.renderLoopSync = exports.renderLoopAsync = void 0;
+
+var _debug = require("../debug.js");
 
 var _index = require("../fiber/index.js");
 
@@ -4962,7 +5086,9 @@ var renderLoopAsync = function renderLoopAsync(pendingNext, shouldYield, cb, _fi
 
   while (fiber && !shouldYield()) {
     count++;
-    fiber = (0, _index2.nextWorkAsync)(fiber);
+    fiber = (0, _debug.safeCall)(function () {
+      return (0, _index2.nextWorkAsync)(fiber);
+    });
     pendingNext.set(fiber);
   }
 
@@ -4974,7 +5100,7 @@ var renderLoopAsync = function renderLoopAsync(pendingNext, shouldYield, cb, _fi
 };
 
 exports.renderLoopAsync = renderLoopAsync;
-},{"../core/index.js":6,"../env.js":19,"../fiber/index.js":21}],37:[function(require,module,exports){
+},{"../core/index.js":6,"../debug.js":8,"../env.js":19,"../fiber/index.js":21}],37:[function(require,module,exports){
 "use strict";
 
 function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
@@ -5017,7 +5143,7 @@ function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || func
 function _getPrototypeOf(o) { _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf : function _getPrototypeOf(o) { return o.__proto__ || Object.getPrototypeOf(o); }; return _getPrototypeOf(o); }
 
 var NODE_TYPE_KEY = ["__isTextNode__", "__isEmptyNode__", "__isPlainNode__", "__isFragmentNode__", // ====  object node ==== //
-"__isObjectNode__", "__isMemo__", "__isPortal__", "__isForwardRef__", "__isContextProvider__", "__isContextConsumer__", // ==== dynamic node ==== //
+"__isObjectNode__", "__isMemo__", "__isPortal__", "__isForwardRef__", "__isContextProvider__", "__isContextConsumer__", "__isLazy__", "__isSuspense__", // ==== dynamic node ==== //
 "__isDynamicNode__", "__isClassComponent__", "__isFunctionComponent__"];
 exports.NODE_TYPE_KEY = NODE_TYPE_KEY;
 var COMPONENT_METHOD = ["shouldComponentUpdate", "componentDidMount", "componentDidUpdate", "componentWillUnmount"];
@@ -5034,6 +5160,8 @@ var DEFAULT_NODE_TYPE = {
   __isForwardRef__: false,
   __isContextProvider__: false,
   __isContextConsumer__: false,
+  __isLazy__: false,
+  __isSuspense__: false,
   // ==== dynamic node ==== //
   __isDynamicNode__: false,
   __isClassComponent__: false,
@@ -5100,488 +5228,488 @@ var IS_SINGLE_ELEMENT = {
 exports.IS_SINGLE_ELEMENT = IS_SINGLE_ELEMENT;
 var possibleStandardNames = {
   // HTML
-  accept: 'accept',
-  acceptcharset: 'acceptCharset',
-  'accept-charset': 'acceptCharset',
-  accesskey: 'accessKey',
-  action: 'action',
-  allowfullscreen: 'allowFullScreen',
-  alt: 'alt',
-  as: 'as',
-  async: 'async',
-  autocapitalize: 'autoCapitalize',
-  autocomplete: 'autoComplete',
-  autocorrect: 'autoCorrect',
-  autofocus: 'autoFocus',
-  autoplay: 'autoPlay',
-  autosave: 'autoSave',
-  capture: 'capture',
-  cellpadding: 'cellPadding',
-  cellspacing: 'cellSpacing',
-  challenge: 'challenge',
-  charset: 'charSet',
-  checked: 'checked',
-  children: 'children',
-  cite: 'cite',
-  "class": 'className',
-  classid: 'classID',
-  classname: 'className',
-  cols: 'cols',
-  colspan: 'colSpan',
-  content: 'content',
-  contenteditable: 'contentEditable',
-  contextmenu: 'contextMenu',
-  controls: 'controls',
-  controlslist: 'controlsList',
-  coords: 'coords',
-  crossorigin: 'crossOrigin',
-  dangerouslysetinnerhtml: 'dangerouslySetInnerHTML',
-  data: 'data',
-  datetime: 'dateTime',
-  "default": 'default',
-  defaultchecked: 'defaultChecked',
-  defaultvalue: 'defaultValue',
-  defer: 'defer',
-  dir: 'dir',
-  disabled: 'disabled',
-  disablepictureinpicture: 'disablePictureInPicture',
-  download: 'download',
-  draggable: 'draggable',
-  enctype: 'encType',
-  "for": 'htmlFor',
-  form: 'form',
-  formmethod: 'formMethod',
-  formaction: 'formAction',
-  formenctype: 'formEncType',
-  formnovalidate: 'formNoValidate',
-  formtarget: 'formTarget',
-  frameborder: 'frameBorder',
-  headers: 'headers',
-  height: 'height',
-  hidden: 'hidden',
-  high: 'high',
-  href: 'href',
-  hreflang: 'hrefLang',
-  htmlfor: 'htmlFor',
-  httpequiv: 'httpEquiv',
-  'http-equiv': 'httpEquiv',
-  icon: 'icon',
-  id: 'id',
-  innerhtml: 'innerHTML',
-  inputmode: 'inputMode',
-  integrity: 'integrity',
-  is: 'is',
-  itemid: 'itemID',
-  itemprop: 'itemProp',
-  itemref: 'itemRef',
-  itemscope: 'itemScope',
-  itemtype: 'itemType',
-  keyparams: 'keyParams',
-  keytype: 'keyType',
-  kind: 'kind',
-  label: 'label',
-  lang: 'lang',
-  list: 'list',
-  loop: 'loop',
-  low: 'low',
-  manifest: 'manifest',
-  marginwidth: 'marginWidth',
-  marginheight: 'marginHeight',
-  max: 'max',
-  maxlength: 'maxLength',
-  media: 'media',
-  mediagroup: 'mediaGroup',
-  method: 'method',
-  min: 'min',
-  minlength: 'minLength',
-  multiple: 'multiple',
-  muted: 'muted',
-  name: 'name',
-  nomodule: 'noModule',
-  nonce: 'nonce',
-  novalidate: 'noValidate',
-  open: 'open',
-  optimum: 'optimum',
-  pattern: 'pattern',
-  placeholder: 'placeholder',
-  playsinline: 'playsInline',
-  poster: 'poster',
-  preload: 'preload',
-  profile: 'profile',
-  radiogroup: 'radioGroup',
-  readonly: 'readOnly',
-  referrerpolicy: 'referrerPolicy',
-  rel: 'rel',
-  required: 'required',
-  reversed: 'reversed',
-  role: 'role',
-  rows: 'rows',
-  rowspan: 'rowSpan',
-  sandbox: 'sandbox',
-  scope: 'scope',
-  scoped: 'scoped',
-  scrolling: 'scrolling',
-  seamless: 'seamless',
-  selected: 'selected',
-  shape: 'shape',
-  size: 'size',
-  sizes: 'sizes',
-  span: 'span',
-  spellcheck: 'spellCheck',
-  src: 'src',
-  srcdoc: 'srcDoc',
-  srclang: 'srcLang',
-  srcset: 'srcSet',
-  start: 'start',
-  step: 'step',
-  style: 'style',
-  summary: 'summary',
-  tabindex: 'tabIndex',
-  target: 'target',
-  title: 'title',
-  type: 'type',
-  usemap: 'useMap',
-  value: 'value',
-  width: 'width',
-  wmode: 'wmode',
-  wrap: 'wrap',
+  accept: "accept",
+  acceptcharset: "acceptCharset",
+  "accept-charset": "acceptCharset",
+  accesskey: "accessKey",
+  action: "action",
+  allowfullscreen: "allowFullScreen",
+  alt: "alt",
+  as: "as",
+  async: "async",
+  autocapitalize: "autoCapitalize",
+  autocomplete: "autoComplete",
+  autocorrect: "autoCorrect",
+  autofocus: "autoFocus",
+  autoplay: "autoPlay",
+  autosave: "autoSave",
+  capture: "capture",
+  cellpadding: "cellPadding",
+  cellspacing: "cellSpacing",
+  challenge: "challenge",
+  charset: "charSet",
+  checked: "checked",
+  children: "children",
+  cite: "cite",
+  "class": "className",
+  classid: "classID",
+  classname: "className",
+  cols: "cols",
+  colspan: "colSpan",
+  content: "content",
+  contenteditable: "contentEditable",
+  contextmenu: "contextMenu",
+  controls: "controls",
+  controlslist: "controlsList",
+  coords: "coords",
+  crossorigin: "crossOrigin",
+  dangerouslysetinnerhtml: "dangerouslySetInnerHTML",
+  data: "data",
+  datetime: "dateTime",
+  "default": "default",
+  defaultchecked: "defaultChecked",
+  defaultvalue: "defaultValue",
+  defer: "defer",
+  dir: "dir",
+  disabled: "disabled",
+  disablepictureinpicture: "disablePictureInPicture",
+  download: "download",
+  draggable: "draggable",
+  enctype: "encType",
+  "for": "htmlFor",
+  form: "form",
+  formmethod: "formMethod",
+  formaction: "formAction",
+  formenctype: "formEncType",
+  formnovalidate: "formNoValidate",
+  formtarget: "formTarget",
+  frameborder: "frameBorder",
+  headers: "headers",
+  height: "height",
+  hidden: "hidden",
+  high: "high",
+  href: "href",
+  hreflang: "hrefLang",
+  htmlfor: "htmlFor",
+  httpequiv: "httpEquiv",
+  "http-equiv": "httpEquiv",
+  icon: "icon",
+  id: "id",
+  innerhtml: "innerHTML",
+  inputmode: "inputMode",
+  integrity: "integrity",
+  is: "is",
+  itemid: "itemID",
+  itemprop: "itemProp",
+  itemref: "itemRef",
+  itemscope: "itemScope",
+  itemtype: "itemType",
+  keyparams: "keyParams",
+  keytype: "keyType",
+  kind: "kind",
+  label: "label",
+  lang: "lang",
+  list: "list",
+  loop: "loop",
+  low: "low",
+  manifest: "manifest",
+  marginwidth: "marginWidth",
+  marginheight: "marginHeight",
+  max: "max",
+  maxlength: "maxLength",
+  media: "media",
+  mediagroup: "mediaGroup",
+  method: "method",
+  min: "min",
+  minlength: "minLength",
+  multiple: "multiple",
+  muted: "muted",
+  name: "name",
+  nomodule: "noModule",
+  nonce: "nonce",
+  novalidate: "noValidate",
+  open: "open",
+  optimum: "optimum",
+  pattern: "pattern",
+  placeholder: "placeholder",
+  playsinline: "playsInline",
+  poster: "poster",
+  preload: "preload",
+  profile: "profile",
+  radiogroup: "radioGroup",
+  readonly: "readOnly",
+  referrerpolicy: "referrerPolicy",
+  rel: "rel",
+  required: "required",
+  reversed: "reversed",
+  role: "role",
+  rows: "rows",
+  rowspan: "rowSpan",
+  sandbox: "sandbox",
+  scope: "scope",
+  scoped: "scoped",
+  scrolling: "scrolling",
+  seamless: "seamless",
+  selected: "selected",
+  shape: "shape",
+  size: "size",
+  sizes: "sizes",
+  span: "span",
+  spellcheck: "spellCheck",
+  src: "src",
+  srcdoc: "srcDoc",
+  srclang: "srcLang",
+  srcset: "srcSet",
+  start: "start",
+  step: "step",
+  style: "style",
+  summary: "summary",
+  tabindex: "tabIndex",
+  target: "target",
+  title: "title",
+  type: "type",
+  usemap: "useMap",
+  value: "value",
+  width: "width",
+  wmode: "wmode",
+  wrap: "wrap",
   // SVG
-  about: 'about',
-  accentheight: 'accentHeight',
-  'accent-height': 'accentHeight',
-  accumulate: 'accumulate',
-  additive: 'additive',
-  alignmentbaseline: 'alignmentBaseline',
-  'alignment-baseline': 'alignmentBaseline',
-  allowreorder: 'allowReorder',
-  alphabetic: 'alphabetic',
-  amplitude: 'amplitude',
-  arabicform: 'arabicForm',
-  'arabic-form': 'arabicForm',
-  ascent: 'ascent',
-  attributename: 'attributeName',
-  attributetype: 'attributeType',
-  autoreverse: 'autoReverse',
-  azimuth: 'azimuth',
-  basefrequency: 'baseFrequency',
-  baselineshift: 'baselineShift',
-  'baseline-shift': 'baselineShift',
-  baseprofile: 'baseProfile',
-  bbox: 'bbox',
-  begin: 'begin',
-  bias: 'bias',
-  by: 'by',
-  calcmode: 'calcMode',
-  capheight: 'capHeight',
-  'cap-height': 'capHeight',
-  clip: 'clip',
-  clippath: 'clipPath',
-  'clip-path': 'clipPath',
-  clippathunits: 'clipPathUnits',
-  cliprule: 'clipRule',
-  'clip-rule': 'clipRule',
-  color: 'color',
-  colorinterpolation: 'colorInterpolation',
-  'color-interpolation': 'colorInterpolation',
-  colorinterpolationfilters: 'colorInterpolationFilters',
-  'color-interpolation-filters': 'colorInterpolationFilters',
-  colorprofile: 'colorProfile',
-  'color-profile': 'colorProfile',
-  colorrendering: 'colorRendering',
-  'color-rendering': 'colorRendering',
-  contentscripttype: 'contentScriptType',
-  contentstyletype: 'contentStyleType',
-  cursor: 'cursor',
-  cx: 'cx',
-  cy: 'cy',
-  d: 'd',
-  datatype: 'datatype',
-  decelerate: 'decelerate',
-  descent: 'descent',
-  diffuseconstant: 'diffuseConstant',
-  direction: 'direction',
-  display: 'display',
-  divisor: 'divisor',
-  dominantbaseline: 'dominantBaseline',
-  'dominant-baseline': 'dominantBaseline',
-  dur: 'dur',
-  dx: 'dx',
-  dy: 'dy',
-  edgemode: 'edgeMode',
-  elevation: 'elevation',
-  enablebackground: 'enableBackground',
-  'enable-background': 'enableBackground',
-  end: 'end',
-  exponent: 'exponent',
-  externalresourcesrequired: 'externalResourcesRequired',
-  fill: 'fill',
-  fillopacity: 'fillOpacity',
-  'fill-opacity': 'fillOpacity',
-  fillrule: 'fillRule',
-  'fill-rule': 'fillRule',
-  filter: 'filter',
-  filterres: 'filterRes',
-  filterunits: 'filterUnits',
-  floodopacity: 'floodOpacity',
-  'flood-opacity': 'floodOpacity',
-  floodcolor: 'floodColor',
-  'flood-color': 'floodColor',
-  focusable: 'focusable',
-  fontfamily: 'fontFamily',
-  'font-family': 'fontFamily',
-  fontsize: 'fontSize',
-  'font-size': 'fontSize',
-  fontsizeadjust: 'fontSizeAdjust',
-  'font-size-adjust': 'fontSizeAdjust',
-  fontstretch: 'fontStretch',
-  'font-stretch': 'fontStretch',
-  fontstyle: 'fontStyle',
-  'font-style': 'fontStyle',
-  fontvariant: 'fontVariant',
-  'font-variant': 'fontVariant',
-  fontweight: 'fontWeight',
-  'font-weight': 'fontWeight',
-  format: 'format',
-  from: 'from',
-  fx: 'fx',
-  fy: 'fy',
-  g1: 'g1',
-  g2: 'g2',
-  glyphname: 'glyphName',
-  'glyph-name': 'glyphName',
-  glyphorientationhorizontal: 'glyphOrientationHorizontal',
-  'glyph-orientation-horizontal': 'glyphOrientationHorizontal',
-  glyphorientationvertical: 'glyphOrientationVertical',
-  'glyph-orientation-vertical': 'glyphOrientationVertical',
-  glyphref: 'glyphRef',
-  gradienttransform: 'gradientTransform',
-  gradientunits: 'gradientUnits',
-  hanging: 'hanging',
-  horizadvx: 'horizAdvX',
-  'horiz-adv-x': 'horizAdvX',
-  horizoriginx: 'horizOriginX',
-  'horiz-origin-x': 'horizOriginX',
-  ideographic: 'ideographic',
-  imagerendering: 'imageRendering',
-  'image-rendering': 'imageRendering',
-  in2: 'in2',
-  "in": 'in',
-  inlist: 'inlist',
-  intercept: 'intercept',
-  k1: 'k1',
-  k2: 'k2',
-  k3: 'k3',
-  k4: 'k4',
-  k: 'k',
-  kernelmatrix: 'kernelMatrix',
-  kernelunitlength: 'kernelUnitLength',
-  kerning: 'kerning',
-  keypoints: 'keyPoints',
-  keysplines: 'keySplines',
-  keytimes: 'keyTimes',
-  lengthadjust: 'lengthAdjust',
-  letterspacing: 'letterSpacing',
-  'letter-spacing': 'letterSpacing',
-  lightingcolor: 'lightingColor',
-  'lighting-color': 'lightingColor',
-  limitingconeangle: 'limitingConeAngle',
-  local: 'local',
-  markerend: 'markerEnd',
-  'marker-end': 'markerEnd',
-  markerheight: 'markerHeight',
-  markermid: 'markerMid',
-  'marker-mid': 'markerMid',
-  markerstart: 'markerStart',
-  'marker-start': 'markerStart',
-  markerunits: 'markerUnits',
-  markerwidth: 'markerWidth',
-  mask: 'mask',
-  maskcontentunits: 'maskContentUnits',
-  maskunits: 'maskUnits',
-  mathematical: 'mathematical',
-  mode: 'mode',
-  numoctaves: 'numOctaves',
-  offset: 'offset',
-  opacity: 'opacity',
-  operator: 'operator',
-  order: 'order',
-  orient: 'orient',
-  orientation: 'orientation',
-  origin: 'origin',
-  overflow: 'overflow',
-  overlineposition: 'overlinePosition',
-  'overline-position': 'overlinePosition',
-  overlinethickness: 'overlineThickness',
-  'overline-thickness': 'overlineThickness',
-  paintorder: 'paintOrder',
-  'paint-order': 'paintOrder',
-  panose1: 'panose1',
-  'panose-1': 'panose1',
-  pathlength: 'pathLength',
-  patterncontentunits: 'patternContentUnits',
-  patterntransform: 'patternTransform',
-  patternunits: 'patternUnits',
-  pointerevents: 'pointerEvents',
-  'pointer-events': 'pointerEvents',
-  points: 'points',
-  pointsatx: 'pointsAtX',
-  pointsaty: 'pointsAtY',
-  pointsatz: 'pointsAtZ',
-  prefix: 'prefix',
-  preservealpha: 'preserveAlpha',
-  preserveaspectratio: 'preserveAspectRatio',
-  primitiveunits: 'primitiveUnits',
-  property: 'property',
-  r: 'r',
-  radius: 'radius',
-  refx: 'refX',
-  refy: 'refY',
-  renderingintent: 'renderingIntent',
-  'rendering-intent': 'renderingIntent',
-  repeatcount: 'repeatCount',
-  repeatdur: 'repeatDur',
-  requiredextensions: 'requiredExtensions',
-  requiredfeatures: 'requiredFeatures',
-  resource: 'resource',
-  restart: 'restart',
-  result: 'result',
-  results: 'results',
-  rotate: 'rotate',
-  rx: 'rx',
-  ry: 'ry',
-  scale: 'scale',
-  security: 'security',
-  seed: 'seed',
-  shaperendering: 'shapeRendering',
-  'shape-rendering': 'shapeRendering',
-  slope: 'slope',
-  spacing: 'spacing',
-  specularconstant: 'specularConstant',
-  specularexponent: 'specularExponent',
-  speed: 'speed',
-  spreadmethod: 'spreadMethod',
-  startoffset: 'startOffset',
-  stddeviation: 'stdDeviation',
-  stemh: 'stemh',
-  stemv: 'stemv',
-  stitchtiles: 'stitchTiles',
-  stopcolor: 'stopColor',
-  'stop-color': 'stopColor',
-  stopopacity: 'stopOpacity',
-  'stop-opacity': 'stopOpacity',
-  strikethroughposition: 'strikethroughPosition',
-  'strikethrough-position': 'strikethroughPosition',
-  strikethroughthickness: 'strikethroughThickness',
-  'strikethrough-thickness': 'strikethroughThickness',
-  string: 'string',
-  stroke: 'stroke',
-  strokedasharray: 'strokeDasharray',
-  'stroke-dasharray': 'strokeDasharray',
-  strokedashoffset: 'strokeDashoffset',
-  'stroke-dashoffset': 'strokeDashoffset',
-  strokelinecap: 'strokeLinecap',
-  'stroke-linecap': 'strokeLinecap',
-  strokelinejoin: 'strokeLinejoin',
-  'stroke-linejoin': 'strokeLinejoin',
-  strokemiterlimit: 'strokeMiterlimit',
-  'stroke-miterlimit': 'strokeMiterlimit',
-  strokewidth: 'strokeWidth',
-  'stroke-width': 'strokeWidth',
-  strokeopacity: 'strokeOpacity',
-  'stroke-opacity': 'strokeOpacity',
-  suppresscontenteditablewarning: 'suppressContentEditableWarning',
-  suppresshydrationwarning: 'suppressHydrationWarning',
-  surfacescale: 'surfaceScale',
-  systemlanguage: 'systemLanguage',
-  tablevalues: 'tableValues',
-  targetx: 'targetX',
-  targety: 'targetY',
-  textanchor: 'textAnchor',
-  'text-anchor': 'textAnchor',
-  textdecoration: 'textDecoration',
-  'text-decoration': 'textDecoration',
-  textlength: 'textLength',
-  textrendering: 'textRendering',
-  'text-rendering': 'textRendering',
-  to: 'to',
-  transform: 'transform',
-  "typeof": 'typeof',
-  u1: 'u1',
-  u2: 'u2',
-  underlineposition: 'underlinePosition',
-  'underline-position': 'underlinePosition',
-  underlinethickness: 'underlineThickness',
-  'underline-thickness': 'underlineThickness',
-  unicode: 'unicode',
-  unicodebidi: 'unicodeBidi',
-  'unicode-bidi': 'unicodeBidi',
-  unicoderange: 'unicodeRange',
-  'unicode-range': 'unicodeRange',
-  unitsperem: 'unitsPerEm',
-  'units-per-em': 'unitsPerEm',
-  unselectable: 'unselectable',
-  valphabetic: 'vAlphabetic',
-  'v-alphabetic': 'vAlphabetic',
-  values: 'values',
-  vectoreffect: 'vectorEffect',
-  'vector-effect': 'vectorEffect',
-  version: 'version',
-  vertadvy: 'vertAdvY',
-  'vert-adv-y': 'vertAdvY',
-  vertoriginx: 'vertOriginX',
-  'vert-origin-x': 'vertOriginX',
-  vertoriginy: 'vertOriginY',
-  'vert-origin-y': 'vertOriginY',
-  vhanging: 'vHanging',
-  'v-hanging': 'vHanging',
-  videographic: 'vIdeographic',
-  'v-ideographic': 'vIdeographic',
-  viewbox: 'viewBox',
-  viewtarget: 'viewTarget',
-  visibility: 'visibility',
-  vmathematical: 'vMathematical',
-  'v-mathematical': 'vMathematical',
-  vocab: 'vocab',
-  widths: 'widths',
-  wordspacing: 'wordSpacing',
-  'word-spacing': 'wordSpacing',
-  writingmode: 'writingMode',
-  'writing-mode': 'writingMode',
-  x1: 'x1',
-  x2: 'x2',
-  x: 'x',
-  xchannelselector: 'xChannelSelector',
-  xheight: 'xHeight',
-  'x-height': 'xHeight',
-  xlinkactuate: 'xlinkActuate',
-  'xlink:actuate': 'xlinkActuate',
-  xlinkarcrole: 'xlinkArcrole',
-  'xlink:arcrole': 'xlinkArcrole',
-  xlinkhref: 'xlinkHref',
-  'xlink:href': 'xlinkHref',
-  xlinkrole: 'xlinkRole',
-  'xlink:role': 'xlinkRole',
-  xlinkshow: 'xlinkShow',
-  'xlink:show': 'xlinkShow',
-  xlinktitle: 'xlinkTitle',
-  'xlink:title': 'xlinkTitle',
-  xlinktype: 'xlinkType',
-  'xlink:type': 'xlinkType',
-  xmlbase: 'xmlBase',
-  'xml:base': 'xmlBase',
-  xmllang: 'xmlLang',
-  'xml:lang': 'xmlLang',
-  xmlns: 'xmlns',
-  'xml:space': 'xmlSpace',
-  xmlnsxlink: 'xmlnsXlink',
-  'xmlns:xlink': 'xmlnsXlink',
-  xmlspace: 'xmlSpace',
-  y1: 'y1',
-  y2: 'y2',
-  y: 'y',
-  ychannelselector: 'yChannelSelector',
-  z: 'z',
-  zoomandpan: 'zoomAndPan'
+  about: "about",
+  accentheight: "accentHeight",
+  "accent-height": "accentHeight",
+  accumulate: "accumulate",
+  additive: "additive",
+  alignmentbaseline: "alignmentBaseline",
+  "alignment-baseline": "alignmentBaseline",
+  allowreorder: "allowReorder",
+  alphabetic: "alphabetic",
+  amplitude: "amplitude",
+  arabicform: "arabicForm",
+  "arabic-form": "arabicForm",
+  ascent: "ascent",
+  attributename: "attributeName",
+  attributetype: "attributeType",
+  autoreverse: "autoReverse",
+  azimuth: "azimuth",
+  basefrequency: "baseFrequency",
+  baselineshift: "baselineShift",
+  "baseline-shift": "baselineShift",
+  baseprofile: "baseProfile",
+  bbox: "bbox",
+  begin: "begin",
+  bias: "bias",
+  by: "by",
+  calcmode: "calcMode",
+  capheight: "capHeight",
+  "cap-height": "capHeight",
+  clip: "clip",
+  clippath: "clipPath",
+  "clip-path": "clipPath",
+  clippathunits: "clipPathUnits",
+  cliprule: "clipRule",
+  "clip-rule": "clipRule",
+  color: "color",
+  colorinterpolation: "colorInterpolation",
+  "color-interpolation": "colorInterpolation",
+  colorinterpolationfilters: "colorInterpolationFilters",
+  "color-interpolation-filters": "colorInterpolationFilters",
+  colorprofile: "colorProfile",
+  "color-profile": "colorProfile",
+  colorrendering: "colorRendering",
+  "color-rendering": "colorRendering",
+  contentscripttype: "contentScriptType",
+  contentstyletype: "contentStyleType",
+  cursor: "cursor",
+  cx: "cx",
+  cy: "cy",
+  d: "d",
+  datatype: "datatype",
+  decelerate: "decelerate",
+  descent: "descent",
+  diffuseconstant: "diffuseConstant",
+  direction: "direction",
+  display: "display",
+  divisor: "divisor",
+  dominantbaseline: "dominantBaseline",
+  "dominant-baseline": "dominantBaseline",
+  dur: "dur",
+  dx: "dx",
+  dy: "dy",
+  edgemode: "edgeMode",
+  elevation: "elevation",
+  enablebackground: "enableBackground",
+  "enable-background": "enableBackground",
+  end: "end",
+  exponent: "exponent",
+  externalresourcesrequired: "externalResourcesRequired",
+  fill: "fill",
+  fillopacity: "fillOpacity",
+  "fill-opacity": "fillOpacity",
+  fillrule: "fillRule",
+  "fill-rule": "fillRule",
+  filter: "filter",
+  filterres: "filterRes",
+  filterunits: "filterUnits",
+  floodopacity: "floodOpacity",
+  "flood-opacity": "floodOpacity",
+  floodcolor: "floodColor",
+  "flood-color": "floodColor",
+  focusable: "focusable",
+  fontfamily: "fontFamily",
+  "font-family": "fontFamily",
+  fontsize: "fontSize",
+  "font-size": "fontSize",
+  fontsizeadjust: "fontSizeAdjust",
+  "font-size-adjust": "fontSizeAdjust",
+  fontstretch: "fontStretch",
+  "font-stretch": "fontStretch",
+  fontstyle: "fontStyle",
+  "font-style": "fontStyle",
+  fontvariant: "fontVariant",
+  "font-variant": "fontVariant",
+  fontweight: "fontWeight",
+  "font-weight": "fontWeight",
+  format: "format",
+  from: "from",
+  fx: "fx",
+  fy: "fy",
+  g1: "g1",
+  g2: "g2",
+  glyphname: "glyphName",
+  "glyph-name": "glyphName",
+  glyphorientationhorizontal: "glyphOrientationHorizontal",
+  "glyph-orientation-horizontal": "glyphOrientationHorizontal",
+  glyphorientationvertical: "glyphOrientationVertical",
+  "glyph-orientation-vertical": "glyphOrientationVertical",
+  glyphref: "glyphRef",
+  gradienttransform: "gradientTransform",
+  gradientunits: "gradientUnits",
+  hanging: "hanging",
+  horizadvx: "horizAdvX",
+  "horiz-adv-x": "horizAdvX",
+  horizoriginx: "horizOriginX",
+  "horiz-origin-x": "horizOriginX",
+  ideographic: "ideographic",
+  imagerendering: "imageRendering",
+  "image-rendering": "imageRendering",
+  in2: "in2",
+  "in": "in",
+  inlist: "inlist",
+  intercept: "intercept",
+  k1: "k1",
+  k2: "k2",
+  k3: "k3",
+  k4: "k4",
+  k: "k",
+  kernelmatrix: "kernelMatrix",
+  kernelunitlength: "kernelUnitLength",
+  kerning: "kerning",
+  keypoints: "keyPoints",
+  keysplines: "keySplines",
+  keytimes: "keyTimes",
+  lengthadjust: "lengthAdjust",
+  letterspacing: "letterSpacing",
+  "letter-spacing": "letterSpacing",
+  lightingcolor: "lightingColor",
+  "lighting-color": "lightingColor",
+  limitingconeangle: "limitingConeAngle",
+  local: "local",
+  markerend: "markerEnd",
+  "marker-end": "markerEnd",
+  markerheight: "markerHeight",
+  markermid: "markerMid",
+  "marker-mid": "markerMid",
+  markerstart: "markerStart",
+  "marker-start": "markerStart",
+  markerunits: "markerUnits",
+  markerwidth: "markerWidth",
+  mask: "mask",
+  maskcontentunits: "maskContentUnits",
+  maskunits: "maskUnits",
+  mathematical: "mathematical",
+  mode: "mode",
+  numoctaves: "numOctaves",
+  offset: "offset",
+  opacity: "opacity",
+  operator: "operator",
+  order: "order",
+  orient: "orient",
+  orientation: "orientation",
+  origin: "origin",
+  overflow: "overflow",
+  overlineposition: "overlinePosition",
+  "overline-position": "overlinePosition",
+  overlinethickness: "overlineThickness",
+  "overline-thickness": "overlineThickness",
+  paintorder: "paintOrder",
+  "paint-order": "paintOrder",
+  panose1: "panose1",
+  "panose-1": "panose1",
+  pathlength: "pathLength",
+  patterncontentunits: "patternContentUnits",
+  patterntransform: "patternTransform",
+  patternunits: "patternUnits",
+  pointerevents: "pointerEvents",
+  "pointer-events": "pointerEvents",
+  points: "points",
+  pointsatx: "pointsAtX",
+  pointsaty: "pointsAtY",
+  pointsatz: "pointsAtZ",
+  prefix: "prefix",
+  preservealpha: "preserveAlpha",
+  preserveaspectratio: "preserveAspectRatio",
+  primitiveunits: "primitiveUnits",
+  property: "property",
+  r: "r",
+  radius: "radius",
+  refx: "refX",
+  refy: "refY",
+  renderingintent: "renderingIntent",
+  "rendering-intent": "renderingIntent",
+  repeatcount: "repeatCount",
+  repeatdur: "repeatDur",
+  requiredextensions: "requiredExtensions",
+  requiredfeatures: "requiredFeatures",
+  resource: "resource",
+  restart: "restart",
+  result: "result",
+  results: "results",
+  rotate: "rotate",
+  rx: "rx",
+  ry: "ry",
+  scale: "scale",
+  security: "security",
+  seed: "seed",
+  shaperendering: "shapeRendering",
+  "shape-rendering": "shapeRendering",
+  slope: "slope",
+  spacing: "spacing",
+  specularconstant: "specularConstant",
+  specularexponent: "specularExponent",
+  speed: "speed",
+  spreadmethod: "spreadMethod",
+  startoffset: "startOffset",
+  stddeviation: "stdDeviation",
+  stemh: "stemh",
+  stemv: "stemv",
+  stitchtiles: "stitchTiles",
+  stopcolor: "stopColor",
+  "stop-color": "stopColor",
+  stopopacity: "stopOpacity",
+  "stop-opacity": "stopOpacity",
+  strikethroughposition: "strikethroughPosition",
+  "strikethrough-position": "strikethroughPosition",
+  strikethroughthickness: "strikethroughThickness",
+  "strikethrough-thickness": "strikethroughThickness",
+  string: "string",
+  stroke: "stroke",
+  strokedasharray: "strokeDasharray",
+  "stroke-dasharray": "strokeDasharray",
+  strokedashoffset: "strokeDashoffset",
+  "stroke-dashoffset": "strokeDashoffset",
+  strokelinecap: "strokeLinecap",
+  "stroke-linecap": "strokeLinecap",
+  strokelinejoin: "strokeLinejoin",
+  "stroke-linejoin": "strokeLinejoin",
+  strokemiterlimit: "strokeMiterlimit",
+  "stroke-miterlimit": "strokeMiterlimit",
+  strokewidth: "strokeWidth",
+  "stroke-width": "strokeWidth",
+  strokeopacity: "strokeOpacity",
+  "stroke-opacity": "strokeOpacity",
+  suppresscontenteditablewarning: "suppressContentEditableWarning",
+  suppresshydrationwarning: "suppressHydrationWarning",
+  surfacescale: "surfaceScale",
+  systemlanguage: "systemLanguage",
+  tablevalues: "tableValues",
+  targetx: "targetX",
+  targety: "targetY",
+  textanchor: "textAnchor",
+  "text-anchor": "textAnchor",
+  textdecoration: "textDecoration",
+  "text-decoration": "textDecoration",
+  textlength: "textLength",
+  textrendering: "textRendering",
+  "text-rendering": "textRendering",
+  to: "to",
+  transform: "transform",
+  "typeof": "typeof",
+  u1: "u1",
+  u2: "u2",
+  underlineposition: "underlinePosition",
+  "underline-position": "underlinePosition",
+  underlinethickness: "underlineThickness",
+  "underline-thickness": "underlineThickness",
+  unicode: "unicode",
+  unicodebidi: "unicodeBidi",
+  "unicode-bidi": "unicodeBidi",
+  unicoderange: "unicodeRange",
+  "unicode-range": "unicodeRange",
+  unitsperem: "unitsPerEm",
+  "units-per-em": "unitsPerEm",
+  unselectable: "unselectable",
+  valphabetic: "vAlphabetic",
+  "v-alphabetic": "vAlphabetic",
+  values: "values",
+  vectoreffect: "vectorEffect",
+  "vector-effect": "vectorEffect",
+  version: "version",
+  vertadvy: "vertAdvY",
+  "vert-adv-y": "vertAdvY",
+  vertoriginx: "vertOriginX",
+  "vert-origin-x": "vertOriginX",
+  vertoriginy: "vertOriginY",
+  "vert-origin-y": "vertOriginY",
+  vhanging: "vHanging",
+  "v-hanging": "vHanging",
+  videographic: "vIdeographic",
+  "v-ideographic": "vIdeographic",
+  viewbox: "viewBox",
+  viewtarget: "viewTarget",
+  visibility: "visibility",
+  vmathematical: "vMathematical",
+  "v-mathematical": "vMathematical",
+  vocab: "vocab",
+  widths: "widths",
+  wordspacing: "wordSpacing",
+  "word-spacing": "wordSpacing",
+  writingmode: "writingMode",
+  "writing-mode": "writingMode",
+  x1: "x1",
+  x2: "x2",
+  x: "x",
+  xchannelselector: "xChannelSelector",
+  xheight: "xHeight",
+  "x-height": "xHeight",
+  xlinkactuate: "xlinkActuate",
+  "xlink:actuate": "xlinkActuate",
+  xlinkarcrole: "xlinkArcrole",
+  "xlink:arcrole": "xlinkArcrole",
+  xlinkhref: "xlinkHref",
+  "xlink:href": "xlinkHref",
+  xlinkrole: "xlinkRole",
+  "xlink:role": "xlinkRole",
+  xlinkshow: "xlinkShow",
+  "xlink:show": "xlinkShow",
+  xlinktitle: "xlinkTitle",
+  "xlink:title": "xlinkTitle",
+  xlinktype: "xlinkType",
+  "xlink:type": "xlinkType",
+  xmlbase: "xmlBase",
+  "xml:base": "xmlBase",
+  xmllang: "xmlLang",
+  "xml:lang": "xmlLang",
+  xmlns: "xmlns",
+  "xml:space": "xmlSpace",
+  xmlnsxlink: "xmlnsXlink",
+  "xmlns:xlink": "xmlnsXlink",
+  xmlspace: "xmlSpace",
+  y1: "y1",
+  y2: "y2",
+  y: "y",
+  ychannelselector: "yChannelSelector",
+  z: "z",
+  zoomandpan: "zoomAndPan"
 };
 var EMPTY_ARRAY = [];
 exports.EMPTY_ARRAY = EMPTY_ARRAY;
@@ -5718,6 +5846,8 @@ var MyReactInternalType = /*#__PURE__*/function () {
       __isMemo__: false,
       __isContextProvider__: false,
       __isContextConsumer__: false,
+      __isLazy__: false,
+      __isSuspense__: false,
       // 动态节点 //
       __isDynamicNode__: false,
       __isClassComponent__: false,
@@ -5776,6 +5906,16 @@ var MyReactInternalType = /*#__PURE__*/function () {
       return this.__internal_node_type__.__isContextConsumer__;
     }
   }, {
+    key: "__isLazy__",
+    get: function get() {
+      return this.__internal_node_type__.__isLazy__;
+    }
+  }, {
+    key: "__isSuspense__",
+    get: function get() {
+      return this.__internal_node_type__.__isSuspense__;
+    }
+  }, {
     key: "__isDynamicNode__",
     get: function get() {
       return this.__internal_node_type__.__isDynamicNode__;
@@ -5802,6 +5942,8 @@ var MyReactInternalType = /*#__PURE__*/function () {
      *  __isForwardRef__: boolean,
      *  __isContextProvider__: boolean,
      *  __isContextConsumer__: boolean,
+     *  __isLazy__: boolean,
+     *  __isSuspense__: boolean,
      *  __isDynamicNode__: boolean,
      *  __isClassComponent__: boolean,
      *  __isFunctionComponent__: boolean}} props
@@ -5828,6 +5970,8 @@ var MyReactInternalType = /*#__PURE__*/function () {
      *  __isForwardRef__: boolean,
      *  __isContextProvider__: boolean,
      *  __isContextConsumer__: boolean,
+     *  __isLazy__: boolean,
+     *  __isSuspense__: boolean,
      *  __isDynamicNode__: boolean,
      *  __isClassComponent__: boolean,
      *  __isFunctionComponent__: boolean}} props
@@ -5934,7 +6078,7 @@ exports.createRef = createRef;
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.Provider = exports.Portal = exports.Memo = exports.Fragment = exports.ForwardRef = exports.Context = exports.Consumer = void 0;
+exports.Suspense = exports.Provider = exports.Portal = exports.Memo = exports.Lazy = exports.Fragment = exports.ForwardRef = exports.Context = exports.Consumer = void 0;
 var Memo = Symbol["for"]("Memo");
 exports.Memo = Memo;
 var ForwardRef = Symbol["for"]("ForwardRef");
@@ -5949,6 +6093,10 @@ var Provider = Symbol["for"]("Context.Provider");
 exports.Provider = Provider;
 var Consumer = Symbol["for"]("Context.Consumer");
 exports.Consumer = Consumer;
+var Lazy = Symbol["for"]("Dynamic.Lazy");
+exports.Lazy = Lazy;
+var Suspense = Symbol["for"]("Dynamic.Suspense");
+exports.Suspense = Suspense;
 },{}],39:[function(require,module,exports){
 "use strict";
 
@@ -6734,6 +6882,14 @@ var getTypeFromVDom = function getTypeFromVDom(vdom) {
 
     case _symbol.ForwardRef:
       nodeType.__isForwardRef__ = true;
+      break;
+
+    case _symbol.Lazy:
+      nodeType.__isLazy__ = true;
+      break;
+
+    case _symbol.Suspense:
+      nodeType.__isSuspense__ = true;
       break;
   }
 
