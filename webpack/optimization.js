@@ -17,7 +17,7 @@ const optimizationConfig = ({ env, isDev = true, isMiddleWareDevelop }) => {
               enforce: true,
               chunks: "all",
               name(module) {
-                const packageName = module.context.match(/[\\/]node_modules[\\/](.*?)([\\/]|$)/)[1];
+                const packageName = module.context.match(/[\\/]node_modules[\\/](.*?)([\\/]|$)/)?.[1];
 
                 switch (packageName) {
                   case "react":
@@ -59,7 +59,7 @@ const optimizationConfig = ({ env, isDev = true, isMiddleWareDevelop }) => {
             enforce: true,
             chunks: "all",
             name(module) {
-              const packageName = module.context.match(/[\\/]node_modules[\\/](.*?)([\\/]|$)/)[1];
+              const packageName = module.context.match(/[\\/]node_modules[\\/](.*?)([\\/]|$)/)?.[1];
 
               switch (packageName) {
                 case "react":

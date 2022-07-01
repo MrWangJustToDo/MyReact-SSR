@@ -37,19 +37,19 @@ const pluginsConfig = ({ env, isDev = true, isSSR = true, isMiddleWareDevelop = 
         chunkFilename: isDev ? "css/[id].css" : "[id].[contenthash].css",
       }),
     // 快速刷新
-    // env === "client" && isDev && new ReactRefreshPlugin(),
+    env === "client" && isDev && new ReactRefreshPlugin(),
     // 对于 webpack-hot-middleware必须启用
     env === "client" && isDev && isMiddleWareDevelop && new webpack.HotModuleReplacementPlugin(),
     // 检查错误
-    env === "client" &&
-      new ForkTsCheckerWebpackPlugin({
-        async: false,
-      }),
-    env === "client" &&
-      new ESLintPlugin({
-        extensions: ["js", "jsx", "ts", "tsx"],
-        quiet: true,
-      }),
+    // env === "client" &&
+    //   new ForkTsCheckerWebpackPlugin({
+    //     async: false,
+    //   }),
+    // env === "client" &&
+    //   new ESLintPlugin({
+    //     extensions: ["js", "jsx", "ts", "tsx"],
+    //     quiet: true,
+    //   }),
     // 查看打包
     // env === "client" && new BundleAnalyzerPlugin(),
   ].filter(Boolean);

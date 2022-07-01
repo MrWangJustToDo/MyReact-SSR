@@ -25,7 +25,6 @@ export const HTML = ({ lang, children, link = [], script = [], reduxInitialState
         <meta name="theme-color" content="red" />
         <meta name="build-time" content={__BUILD_TIME__} />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />
         <>
           {helmet?.base.toComponent()}
           {helmet?.title.toComponent()}

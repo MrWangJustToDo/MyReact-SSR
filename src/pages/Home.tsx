@@ -11,5 +11,10 @@ export default function Home() {
     };
   });
 
-  return <div>home page {state}</div>;
+  return (
+    <div>
+      home page {state}
+      <div style={{ color: "red" }}>test gggg fast refresh</div>
+    </div>
+  );
 }
