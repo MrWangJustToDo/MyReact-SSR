@@ -13,7 +13,7 @@ export default function Home() {
 
   return (
     <div>
-      home page {state}
+      home page {state} ff
       <div style={{ color: "red" }}>test gggg fast refresh</div>
     </div>
   );

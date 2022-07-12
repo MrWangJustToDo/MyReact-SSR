@@ -63,10 +63,8 @@ var count = function count(arrayLike) {
 exports.count = count;
 
 var only = function only(child) {
-  if (child instanceof _index.MyReactVDom) {
-    return child;
-  }
-
+  if ((0, _index.isValidElement)(child)) return child;
+  if (typeof child === "string" || typeof child === "number") return child;
   throw new Error("Children.only expected to receive a single MyReact element child.");
 };
 
@@ -862,8 +860,8 @@ var isSameTypeNode = function isSameTypeNode(newVDom, previousRenderChild) {
   if (newVDomIsArray) return false;
   if (previousRenderChildIsArray) return false;
   var previousRenderChildVDom = previousRenderChild === null || previousRenderChild === void 0 ? void 0 : previousRenderChild.__vdom__;
-  var newVDomIsVDomInstance = newVDom instanceof _index.MyReactVDom;
-  var previousRenderChildVDomIsVDomInstance = previousRenderChildVDom instanceof _index.MyReactVDom;
+  var newVDomIsVDomInstance = (0, _index.isValidElement)(newVDom);
+  var previousRenderChildVDomIsVDomInstance = (0, _index.isValidElement)(previousRenderChildVDom);
 
   if (newVDomIsVDomInstance && previousRenderChildVDomIsVDomInstance) {
     // key different
@@ -903,7 +901,7 @@ var getMatchedRenderChildren = function getMatchedRenderChildren(newChildren, pr
   var assignPreviousRenderChildren = Array(tempRenderChildren.length).fill(null);
   newChildren.forEach(function (vDom, index) {
     if (tempRenderChildren.length) {
-      if (vDom instanceof _index.MyReactVDom && vDom.key !== undefined) {
+      if ((0, _index.isValidElement)(vDom) && vDom.key !== undefined) {
         var targetIndex = tempRenderChildren.findIndex(function (fiber) {
           return fiber instanceof _index2.MyReactFiberNode && fiber.key === vDom.key;
         });
@@ -975,7 +973,7 @@ var getNewFiberWithUpdate = function getNewFiberWithUpdate(newVDom, parentFiber,
       return (0, _index2.updateFiberNodeWithPosition)(currentMatchedPreviousRenderChild, parentFiber, newVDom, previousRenderChild);
     }
 
-    if (currentMatchedPreviousRenderChild.__isPlainNode__ && (0, _tool.isEqual)(currentMatchedPreviousRenderChild.__vdom__.props, newVDom.props)) {
+    if (currentMatchedPreviousRenderChild.__isPlainNode__ && (0, _tool.isNormalEqual)(currentMatchedPreviousRenderChild.__vdom__.props, newVDom.props)) {
       return (0, _index2.updateFiberNodeWithPosition)(currentMatchedPreviousRenderChild, parentFiber, newVDom, previousRenderChild);
     }
 
@@ -1062,21 +1060,26 @@ var _instance = require("./hook/instance.js");
  * @param {MyReactFiberNode} fiber
  */
 var trackDevLog = function trackDevLog(fiber) {
-  var _vdom$props, _vdom$type;
+  var _vdom$type;
 
   var showDisplayName = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
   var vdom = fiber.__vdom__;
-  var source = vdom === null || vdom === void 0 ? void 0 : (_vdom$props = vdom.props) === null || _vdom$props === void 0 ? void 0 : _vdom$props.__source;
+  var source = vdom === null || vdom === void 0 ? void 0 : vdom._source;
+  var owner = vdom === null || vdom === void 0 ? void 0 : vdom._owner;
   var displayName = (vdom === null || vdom === void 0 ? void 0 : (_vdom$type = vdom.type) === null || _vdom$type === void 0 ? void 0 : _vdom$type.displayName) || "";
   var preString = showDisplayName && displayName ? " - ".concat(displayName, " ") : "";
 
   if (source) {
     var fileName = source.fileName,
         lineNumber = source.lineNumber;
-    return "".concat(preString, " (").concat(fileName, ":").concat(lineNumber, ")");
-  } else {
-    return "".concat(preString);
+    preString = "".concat(preString, " (").concat(fileName, ":").concat(lineNumber, ")");
   }
+
+  if (!fiber.__isDynamicNode__ && owner && (owner.__vdom__.type.displayName || owner.__vdom__.type.name)) {
+    preString = "".concat(preString, " (render by ").concat(owner.__vdom__.type.displayName || owner.__vdom__.type.name, ")");
+  }
+
+  return preString;
 };
 /**
  *
@@ -1232,7 +1235,7 @@ var debugWithDom = function debugWithDom(fiber) {
   if (fiber !== null && fiber !== void 0 && fiber.dom) {
     fiber.dom.__fiber__ = fiber;
     fiber.dom.__vdom__ = fiber.__vdom__;
-    fiber.dom.__children = fiber.children;
+    fiber.dom.__children__ = fiber.children;
   }
 };
 
@@ -2435,10 +2438,12 @@ var _index = require("./vdom/index.js");
 
 function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
 
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
 function createPortal(element, container) {
-  return (0, _index.createElement)({
-    type: _symbol.Portal
-  }, {
+  var _createElement;
+
+  return (0, _index.createElement)((_createElement = {}, _defineProperty(_createElement, "$$typeof", _symbol.MY_REACT_Element), _defineProperty(_createElement, "type", _symbol.MY_REACT_Portal), _createElement), {
     container: container
   }, element);
 }
@@ -2446,18 +2451,11 @@ function createPortal(element, container) {
 var contextId = 0;
 
 function createContext(value) {
-  var ContextObject = {
-    type: _symbol.Context,
-    id: contextId++
-  };
-  var ProviderObject = {
-    type: _symbol.Provider,
-    value: value
-  };
-  var ConsumerObject = {
-    type: _symbol.Consumer,
-    Internal: _share.MyReactInternalInstance
-  };
+  var _ContextObject, _ProviderObject, _ConsumerObject;
+
+  var ContextObject = (_ContextObject = {}, _defineProperty(_ContextObject, "$$typeof", _symbol.MY_REACT_Element), _defineProperty(_ContextObject, "type", _symbol.MY_REACT_Context), _defineProperty(_ContextObject, "id", contextId++), _ContextObject);
+  var ProviderObject = (_ProviderObject = {}, _defineProperty(_ProviderObject, "$$typeof", _symbol.MY_REACT_Element), _defineProperty(_ProviderObject, "type", _symbol.MY_REACT_Provider), _defineProperty(_ProviderObject, "value", value), _ProviderObject);
+  var ConsumerObject = (_ConsumerObject = {}, _defineProperty(_ConsumerObject, "$$typeof", _symbol.MY_REACT_Element), _defineProperty(_ConsumerObject, "type", _symbol.MY_REACT_Consumer), _defineProperty(_ConsumerObject, "Internal", _share.MyReactInternalInstance), _ConsumerObject);
   Object.defineProperty(ConsumerObject, "Context", {
     get: function get() {
       return ContextObject;
@@ -2478,17 +2476,15 @@ function createContext(value) {
 }
 
 function forwardRef(ForwardRefRender) {
-  return {
-    type: _symbol.ForwardRef,
-    render: ForwardRefRender
-  };
+  var _ref;
+
+  return _ref = {}, _defineProperty(_ref, "$$typeof", _symbol.MY_REACT_Element), _defineProperty(_ref, "type", _symbol.MY_REACT_ForwardRef), _defineProperty(_ref, "render", ForwardRefRender), _ref;
 }
 
 function memo(MemoRender) {
-  var MemoObject = {
-    type: _symbol.Memo,
-    render: MemoRender
-  };
+  var _MemoObject;
+
+  var MemoObject = (_MemoObject = {}, _defineProperty(_MemoObject, "$$typeof", _symbol.MY_REACT_Element), _defineProperty(_MemoObject, "type", _symbol.MY_REACT_Memo), _defineProperty(_MemoObject, "render", MemoRender), _MemoObject);
   Object.defineProperty(MemoObject, "isMyReactMemoComponent", {
     get: function get() {
       return true;
@@ -2498,7 +2494,7 @@ function memo(MemoRender) {
   });
   Object.defineProperty(MemoObject, "isMyReactForwardRefRender", {
     get: function get() {
-      return _typeof(MemoRender) === "object" && MemoRender.type === _symbol.ForwardRef;
+      return _typeof(MemoRender) === "object" && MemoRender.type === _symbol.MY_REACT_ForwardRef;
     },
     enumerable: false,
     configurable: false
@@ -2507,13 +2503,9 @@ function memo(MemoRender) {
 }
 
 function lazy(loader) {
-  var LazyObject = {
-    type: _symbol.Lazy,
-    loader: loader,
-    _initial: true,
-    _loaded: false,
-    _result: null
-  };
+  var _LazyObject;
+
+  var LazyObject = (_LazyObject = {}, _defineProperty(_LazyObject, "$$typeof", _symbol.MY_REACT_Element), _defineProperty(_LazyObject, "type", _symbol.MY_REACT_Lazy), _defineProperty(_LazyObject, "loader", loader), _defineProperty(_LazyObject, "_initial", true), _defineProperty(_LazyObject, "_loaded", false), _defineProperty(_LazyObject, "_result", null), _LazyObject);
   Object.defineProperty(LazyObject, "isMyReactLazyComponent", {
     get: function get() {
       return true;
@@ -3551,7 +3543,7 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
       if (_env.enableAllCheck.current) {
         if ((0, _index4.isValidElement)(vdom)) {
           // TODO
-          if (!vdom.__validType__) {
+          if (!vdom._store["validType"]) {
             if (this.__isContextConsumer__) {
               if (typeof vdom.children !== "function") {
                 throw new Error("Consumer's children must as a function, got ".concat(vdom.children));
@@ -3604,7 +3596,7 @@ var MyReactFiberNode = /*#__PURE__*/function (_MyReactFiberInternal) {
               throw new Error("invalid key props");
             }
 
-            vdom.__validType__ = true;
+            vdom._store["validType"] = true;
           }
         }
       }
@@ -4680,38 +4672,44 @@ exports.Component = exports.Children = void 0;
 Object.defineProperty(exports, "Consumer", {
   enumerable: true,
   get: function get() {
-    return _symbol.Consumer;
+    return _symbol.MY_REACT_Consumer;
+  }
+});
+Object.defineProperty(exports, "Element", {
+  enumerable: true,
+  get: function get() {
+    return _symbol.MY_REACT_Element;
   }
 });
 Object.defineProperty(exports, "ForwardRef", {
   enumerable: true,
   get: function get() {
-    return _symbol.ForwardRef;
+    return _symbol.MY_REACT_ForwardRef;
   }
 });
 Object.defineProperty(exports, "Fragment", {
   enumerable: true,
   get: function get() {
-    return _symbol.Fragment;
+    return _symbol.MY_REACT_Fragment;
   }
 });
 Object.defineProperty(exports, "Portal", {
   enumerable: true,
   get: function get() {
-    return _symbol.Portal;
+    return _symbol.MY_REACT_Portal;
   }
 });
 Object.defineProperty(exports, "Provider", {
   enumerable: true,
   get: function get() {
-    return _symbol.Provider;
+    return _symbol.MY_REACT_Provider;
   }
 });
 exports.PureComponent = void 0;
 Object.defineProperty(exports, "Suspense", {
   enumerable: true,
   get: function get() {
-    return _symbol.Suspense;
+    return _symbol.MY_REACT_Suspense;
   }
 });
 Object.defineProperty(exports, "cloneElement", {
@@ -4915,11 +4913,12 @@ var React = {
   createContext: _element.createContext,
   isValidElement: _index.isValidElement,
   // element type
-  Portal: _symbol.Portal,
-  Provider: _symbol.Provider,
-  Consumer: _symbol.Consumer,
-  Fragment: _symbol.Fragment,
-  ForwardRef: _symbol.ForwardRef,
+  Element: _symbol.MY_REACT_Element,
+  Portal: _symbol.MY_REACT_Portal,
+  Provider: _symbol.MY_REACT_Provider,
+  Consumer: _symbol.MY_REACT_Consumer,
+  Fragment: _symbol.MY_REACT_Fragment,
+  ForwardRef: _symbol.MY_REACT_ForwardRef,
   // hook
   useRef: _index4.useRef,
   useMemo: _index4.useMemo,
@@ -4935,12 +4934,14 @@ var React = {
   Children: Children,
   // split chunk
   lazy: _element.lazy,
-  Suspense: _symbol.Suspense
+  Suspense: _symbol.MY_REACT_Suspense
 };
 globalThis.React = React;
 globalThis.ReactDOM = ReactDOM;
 Object.keys(React).forEach(function (key) {
-  globalThis[key] = React[key];
+  if (key.startsWith("use")) {
+    globalThis[key] = React[key];
+  }
 });
 
 var mixIn = _objectSpread(_objectSpread({}, React), ReactDOM);
@@ -6098,25 +6099,27 @@ exports.createRef = createRef;
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.Suspense = exports.Provider = exports.Portal = exports.Memo = exports.Lazy = exports.Fragment = exports.ForwardRef = exports.Context = exports.Consumer = void 0;
-var Memo = Symbol["for"]("react.memo");
-exports.Memo = Memo;
-var ForwardRef = Symbol["for"]("react.forward_ref");
-exports.ForwardRef = ForwardRef;
-var Portal = Symbol["for"]("react.portal");
-exports.Portal = Portal;
-var Fragment = Symbol["for"]("react.fragment");
-exports.Fragment = Fragment;
-var Context = Symbol["for"]("react.context");
-exports.Context = Context;
-var Provider = Symbol["for"]("react.provider");
-exports.Provider = Provider;
-var Consumer = Symbol["for"]("react.consumer");
-exports.Consumer = Consumer;
-var Lazy = Symbol["for"]("react.lazy");
-exports.Lazy = Lazy;
-var Suspense = Symbol["for"]("react.suspense");
-exports.Suspense = Suspense;
+exports.MY_REACT_Suspense = exports.MY_REACT_Provider = exports.MY_REACT_Portal = exports.MY_REACT_Memo = exports.MY_REACT_Lazy = exports.MY_REACT_Fragment = exports.MY_REACT_ForwardRef = exports.MY_REACT_Element = exports.MY_REACT_Context = exports.MY_REACT_Consumer = void 0;
+var MY_REACT_Element = Symbol["for"]("react.element");
+exports.MY_REACT_Element = MY_REACT_Element;
+var MY_REACT_Memo = Symbol["for"]("react.memo");
+exports.MY_REACT_Memo = MY_REACT_Memo;
+var MY_REACT_ForwardRef = Symbol["for"]("react.forward_ref");
+exports.MY_REACT_ForwardRef = MY_REACT_ForwardRef;
+var MY_REACT_Portal = Symbol["for"]("react.portal");
+exports.MY_REACT_Portal = MY_REACT_Portal;
+var MY_REACT_Fragment = Symbol["for"]("react.fragment");
+exports.MY_REACT_Fragment = MY_REACT_Fragment;
+var MY_REACT_Context = Symbol["for"]("react.context");
+exports.MY_REACT_Context = MY_REACT_Context;
+var MY_REACT_Provider = Symbol["for"]("react.provider");
+exports.MY_REACT_Provider = MY_REACT_Provider;
+var MY_REACT_Consumer = Symbol["for"]("react.consumer");
+exports.MY_REACT_Consumer = MY_REACT_Consumer;
+var MY_REACT_Lazy = Symbol["for"]("react.lazy");
+exports.MY_REACT_Lazy = MY_REACT_Lazy;
+var MY_REACT_Suspense = Symbol["for"]("react.suspense");
+exports.MY_REACT_Suspense = MY_REACT_Suspense;
 },{}],39:[function(require,module,exports){
 "use strict";
 
@@ -6180,7 +6183,7 @@ var isEqual = function isEqual(src, target) {
     flag = flag && Object.keys(src).length === Object.keys(target).length;
 
     for (var key in src) {
-      if (key !== "children" && !key.startsWith("__")) {
+      if (key !== "children" && !key.startsWith("_") && key !== "owner") {
         flag = flag && isEqual(src[key], target[key]);
       }
     }
@@ -6199,7 +6202,7 @@ var isNormalEqual = function isNormalEqual(src, target) {
     flag = flag && Object.keys(src).length === Object.keys(target).length;
 
     for (var key in src) {
-      if (!key.startsWith("__")) {
+      if (!key.startsWith("_")) {
         flag = flag && Object.is(src[key], target[key]);
 
         if (!flag) {
@@ -6239,7 +6242,7 @@ exports.shouldYieldAsyncUpdate = shouldYieldAsyncUpdate;
 var cannotUpdate = function cannotUpdate() {
   if (_env.isServerRender.current) throw new Error("can not update component during SSR");
   if (_env.isHydrateRender.current) throw new Error("can not update component during hydrate");
-  if (typeof window === 'undefined') return false;
+  if (typeof window === "undefined") return false;
   return true;
 };
 
@@ -6615,7 +6618,7 @@ Object.defineProperty(exports, "MyReactVDom", {
 Object.defineProperty(exports, "cloneElement", {
   enumerable: true,
   get: function get() {
-    return _tool.cloneElement;
+    return _instance.cloneElement;
   }
 });
 Object.defineProperty(exports, "createElement", {
@@ -6647,11 +6650,19 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.MyReactVDom = void 0;
+exports.cloneElement = cloneElement;
 exports.createElement = createElement;
+
+var _symbol = require("../symbol.js");
+
+var _env = require("../env.js");
 
 var _tool = require("./tool.js");
 
-var _excluded = ["key", "ref", "dangerouslySetInnerHTML"];
+var _excluded = ["ref", "key", "__self", "__source"],
+    _excluded2 = ["ref", "key", "__self", "__source"];
+
+function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
 
 function _objectWithoutProperties(source, excluded) { if (source == null) return {}; var target = _objectWithoutPropertiesLoose(source, excluded); var key, i; if (Object.getOwnPropertySymbols) { var sourceSymbolKeys = Object.getOwnPropertySymbols(source); for (i = 0; i < sourceSymbolKeys.length; i++) { key = sourceSymbolKeys[i]; if (excluded.indexOf(key) >= 0) continue; if (!Object.prototype.propertyIsEnumerable.call(source, key)) continue; target[key] = source[key]; } } return target; }
 
@@ -6665,39 +6676,87 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 
 function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
 
-var MyReactVDom = /*#__PURE__*/_createClass(function MyReactVDom(type, props, children) {
+var MyReactVDom = /*#__PURE__*/_createClass( // TODO change this to fiber instance
+function MyReactVDom(type, key, ref, self, source, owner, props) {
   _classCallCheck(this, MyReactVDom);
+
+  _defineProperty(this, "_owner", void 0);
+
+  _defineProperty(this, "_store", void 0);
+
+  _defineProperty(this, "_self", void 0);
+
+  _defineProperty(this, "_source", void 0);
 
   _defineProperty(this, "__dynamicChildren__", void 0);
 
-  var _ref = props || {},
-      key = _ref.key,
-      ref = _ref.ref,
-      dangerouslySetInnerHTML = _ref.dangerouslySetInnerHTML,
-      resProps = _objectWithoutProperties(_ref, _excluded); // for fast refresh
-
-
-  this['$$typeof'] = type;
+  this["$$typeof"] = _symbol.MY_REACT_Element;
   this.type = type;
   this.key = key;
   this.ref = ref;
-  this.props = resProps;
-  this.children = (dangerouslySetInnerHTML === null || dangerouslySetInnerHTML === void 0 ? void 0 : dangerouslySetInnerHTML.__html) || children;
+  this.props = props;
+  this._owner = owner;
+  this._self = self;
+  this._source = source;
+  this._store = {};
 });
 
 exports.MyReactVDom = MyReactVDom;
 
 function createVDom(_ref2) {
-  var type = _ref2.type,
-      props = _ref2.props,
-      children = _ref2.children;
-  return new MyReactVDom(type, props, children || props.children);
-}
+  var _props$dangerouslySet, _ref3;
 
-function createElement(type, props, children) {
+  var type = _ref2.type,
+      key = _ref2.key,
+      ref = _ref2.ref,
+      self = _ref2.self,
+      source = _ref2.source,
+      owner = _ref2.owner,
+      props = _ref2.props;
+  return _ref3 = {}, _defineProperty(_ref3, "$$typeof", _symbol.MY_REACT_Element), _defineProperty(_ref3, "type", type), _defineProperty(_ref3, "key", key), _defineProperty(_ref3, "ref", ref), _defineProperty(_ref3, "props", props), _defineProperty(_ref3, "children", ((_props$dangerouslySet = props["dangerouslySetInnerHTML"]) === null || _props$dangerouslySet === void 0 ? void 0 : _props$dangerouslySet.__html) || props.children), _defineProperty(_ref3, "_owner", owner), _defineProperty(_ref3, "_self", self), _defineProperty(_ref3, "_source", source), _defineProperty(_ref3, "_store", {}), _ref3; // return new MyReactVDom(type, props, children || props.children);
+} // try to support fast refresh
+
+/**
+ *
+ * @param {MyReactVDom} element
+ * @param {any} config
+ * @param {MyReactVDom | MyReactVDom[]} children
+ * @returns
+ */
+
+
+function createElement(type, config, children) {
   var childrenLength = arguments.length - 2;
-  props = props || {};
-  props = Object.assign({}, props);
+  var key = null;
+  var ref = null;
+  var self = null;
+  var source = null;
+  var props = {};
+
+  if (config !== null && config !== undefined) {
+    var _ref = config.ref,
+        _key = config.key,
+        __self = config.__self,
+        __source = config.__source,
+        resConfig = _objectWithoutProperties(config, _excluded);
+
+    if (_ref !== undefined) {
+      ref = _ref;
+    }
+
+    if (_key !== undefined) {
+      key = "" + _key;
+    }
+
+    self = __self === undefined ? null : __self;
+    source = __source === undefined ? null : __source;
+
+    for (var _key2 in resConfig) {
+      if (Object.prototype.hasOwnProperty.call(resConfig, _key2)) {
+        props[_key2] = resConfig[_key2];
+      }
+    }
+  }
 
   if (type !== null && type !== void 0 && type.defaultProps) {
     Object.keys(type.defaultProps).forEach(function (propKey) {
@@ -6708,29 +6767,112 @@ function createElement(type, props, children) {
   if (childrenLength > 1) {
     children = Array.from(arguments).slice(2);
     (0, _tool.checkArrayChildrenKey)(children);
-  } else {
+    props.children = children;
+  } else if (childrenLength === 1) {
     (0, _tool.checkSingleChildrenKey)(children);
-  }
-
-  if (Array.isArray(children) && children.length || children !== null && children !== undefined) {
     props.children = children;
   }
 
   return createVDom({
     type: type,
-    props: props,
-    children: children
+    key: key,
+    ref: ref,
+    self: self,
+    source: source,
+    owner: _env.currentFunctionFiber.current,
+    props: props
   });
 }
-},{"./tool.js":47}],47:[function(require,module,exports){
+/**
+ *
+ * @param {MyReactVDom} element
+ * @param {any} config
+ * @param {MyReactVDom | MyReactVDom[]} children
+ * @returns
+ */
+
+
+function cloneElement(element, config, children) {
+  if (_typeof(element) === "object") {
+    if ((0, _tool.isValidElement)(element)) {
+      // copy from react source
+      var props = Object.assign({}, element.props);
+      var type = element.type;
+      var key = element.key;
+      var ref = element.ref;
+      var self = element._self;
+      var source = element._source;
+      var owner = element._owner;
+
+      if (config !== null && config !== undefined) {
+        var _ref = config.ref,
+            _key = config.key,
+            __self = config.__self,
+            __source = config.__source,
+            resConfig = _objectWithoutProperties(config, _excluded2);
+
+        if (_ref !== undefined) {
+          ref = _ref;
+          owner = _env.currentFunctionFiber.current;
+        }
+
+        if (_key !== undefined) {
+          key = "" + _key;
+        }
+
+        var defaultProps;
+
+        if (element.type && element.type.defaultProps) {
+          defaultProps = element.type.defaultProps;
+        }
+
+        for (var _key3 in resConfig) {
+          if (Object.prototype.hasOwnProperty.call(resConfig, _key3)) {
+            if (resConfig[_key3] === undefined && defaultProps !== undefined) {
+              props[_key3] = defaultProps[_key3];
+            } else {
+              props[_key3] = resConfig[_key3];
+            }
+          }
+        }
+      }
+
+      var childrenLength = arguments.length - 2;
+
+      if (childrenLength === 1) {
+        (0, _tool.checkSingleChildrenKey)(children);
+        props.children = children;
+      } else if (childrenLength > 1) {
+        children = Array.from(arguments).slice(2);
+        (0, _tool.checkArrayChildrenKey)(children);
+        props.children = children;
+      }
+
+      var clonedElement = createVDom({
+        type: type,
+        key: key,
+        ref: ref,
+        self: self,
+        source: source,
+        owner: owner,
+        props: props
+      });
+      clonedElement._store["cloned"] = true;
+      return clonedElement;
+    } else {
+      throw new Error("cloneElement() must support a valid element, but get ".concat(element));
+    }
+  } else {
+    return element;
+  }
+}
+},{"../env.js":19,"../symbol.js":38,"./tool.js":47}],47:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.checkSingleChildrenKey = exports.checkArrayChildrenKey = void 0;
-exports.cloneElement = cloneElement;
-exports.isValidElement = exports.getTypeFromVDom = void 0;
+exports.isValidElement = exports.getTypeFromVDom = exports.checkSingleChildrenKey = exports.checkArrayChildrenKey = void 0;
 
 var _debug = require("../debug.js");
 
@@ -6746,23 +6888,16 @@ var _instance = require("./instance.js");
 
 function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
 
-function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableSpread(); }
-
-function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-
-function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
-
-function _iterableToArray(iter) { if (typeof Symbol !== "undefined" && iter[Symbol.iterator] != null || iter["@@iterator"] != null) return Array.from(iter); }
-
-function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) return _arrayLikeToArray(arr); }
-
-function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
-
 /**
  *
  * @param {MyReactVDom | any} element
  */
 var isValidElement = function isValidElement(element) {
+  // support not a VDom instance element
+  if (_typeof(element) === "object" && (element === null || element === void 0 ? void 0 : element["$$typeof"]) === _symbol.MY_REACT_Element) {
+    return true;
+  }
+
   if (element instanceof _instance.MyReactVDom) {
     return true;
   } else {
@@ -6771,62 +6906,37 @@ var isValidElement = function isValidElement(element) {
 };
 /**
  *
- * @param {MyReactVDom | any} element
- * @param {any} props
- * @param {MyReactVDom[] | any[]} children
- * @returns
+ * @param {MyReactVDom[]} children
  */
 
 
 exports.isValidElement = isValidElement;
 
-function cloneElement(element, props, children) {
-  if (element instanceof _instance.MyReactVDom) {
-    var clonedElement = _instance.createElement.apply(void 0, [element.type, Object.assign({}, element.props, {
-      key: element.key
-    }, {
-      ref: element.ref
-    }, props), children].concat(_toConsumableArray(Array.from(arguments).slice(3))));
-
-    if (_env.enableAllCheck.current) {
-      clonedElement.__validKey__ = true;
-      clonedElement.__validType__ = true;
-      clonedElement.__clonedNode__ = true;
-    }
-
-    return clonedElement;
-  } else {
-    return element;
-  }
-}
-/**
- *
- * @param {MyReactVDom[]} children
- */
-
-
 var checkValidKey = function checkValidKey(children) {
   var obj = {};
+  var needCheck = children.length > 1;
   var onceWarningDuplicate = (0, _tool.once)(_debug.warning);
   var onceWarningUndefined = (0, _tool.once)(_debug.warning);
   children.forEach(function (c) {
-    if (isValidElement(c) && !c.__validKey__) {
-      if (obj[c.key]) {
-        onceWarningDuplicate({
-          message: "array child have duplicate key"
-        });
+    if (isValidElement(c) && !c._store["validated"]) {
+      if (needCheck) {
+        if (obj[c.key]) {
+          onceWarningDuplicate({
+            message: "array child have duplicate key"
+          });
+        }
+
+        if (c.key === undefined) {
+          onceWarningUndefined({
+            message: "each array child must have a unique key props",
+            treeOnce: true
+          });
+        } else {
+          obj[c.key] = true;
+        }
       }
 
-      if (c.key === undefined) {
-        onceWarningUndefined({
-          message: "each array child must have a unique key props",
-          treeOnce: true
-        });
-      } else {
-        obj[c.key] = true;
-      }
-
-      c.__validKey__ = true;
+      c._store["validated"] = true;
     }
   });
 };
@@ -6842,7 +6952,7 @@ var checkArrayChildrenKey = function checkArrayChildrenKey(children) {
       if (Array.isArray(child)) {
         checkValidKey(child);
       } else if (isValidElement(child)) {
-        child.__validKey__ = true;
+        child._store["validated"] = true;
       }
     });
   }
@@ -6860,7 +6970,7 @@ var checkSingleChildrenKey = function checkSingleChildrenKey(children) {
     if (Array.isArray(children)) {
       checkValidKey(children);
     } else if (isValidElement(children)) {
-      children.__validKey__ = true;
+      children._store["validated"] = true;
     }
   }
 };
@@ -6882,35 +6992,35 @@ var getTypeFromVDom = function getTypeFromVDom(vdom) {
   }
 
   switch (rawType) {
-    case _symbol.Fragment:
+    case _symbol.MY_REACT_Fragment:
       nodeType.__isFragmentNode__ = true;
       break;
 
-    case _symbol.Provider:
+    case _symbol.MY_REACT_Provider:
       nodeType.__isContextProvider__ = true;
       break;
 
-    case _symbol.Consumer:
+    case _symbol.MY_REACT_Consumer:
       nodeType.__isContextConsumer__ = true;
       break;
 
-    case _symbol.Portal:
+    case _symbol.MY_REACT_Portal:
       nodeType.__isPortal__ = true;
       break;
 
-    case _symbol.Memo:
+    case _symbol.MY_REACT_Memo:
       nodeType.__isMemo__ = true;
       break;
 
-    case _symbol.ForwardRef:
+    case _symbol.MY_REACT_ForwardRef:
       nodeType.__isForwardRef__ = true;
       break;
 
-    case _symbol.Lazy:
+    case _symbol.MY_REACT_Lazy:
       nodeType.__isLazy__ = true;
       break;
 
-    case _symbol.Suspense:
+    case _symbol.MY_REACT_Suspense:
       nodeType.__isSuspense__ = true;
       break;
   }
