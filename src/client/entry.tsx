@@ -47,6 +47,7 @@ if (__CSR__) {
 } else {
   if (!window.__ENV__.isSSR) {
     loadableReady(() => render(<Root store={store} />, place));
+    // console.log((window as any).ReactDOM.renderToString(<Root store={store} />))
   } else {
     if (window.__ENV__.isDEVELOPMENT && window.__ENV__.isMIDDLEWARE) {
       log("not hydrate render on client", "warn");

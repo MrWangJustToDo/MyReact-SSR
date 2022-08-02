@@ -27,7 +27,7 @@ if (__UI__ === "chakra") {
 const routes: PreLoadRouteConfig[] = [
   { path: "/", element: <UI />, Component: UI },
   { path: "/i18n", element: <LoadAble_I18n />, Component: LoadAble_I18n },
-  { path: __UI__ === "antd" ? "/antd"  : "chakra", element: <LoadAble_UI />, Component: LoadAble_UI },
+  { path: __UI__ === "antd" ? "/antd"  : "/chakra", element: <LoadAble_UI />, Component: LoadAble_UI },
 ];
 
 const dynamicRoutes = dynamicRouteConfig
