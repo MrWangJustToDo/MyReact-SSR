@@ -1,9 +1,44 @@
-import { Select, Button, Box, Fade, useDisclosure, Menu, MenuButton, MenuList, MenuItem, useColorMode, Text, Stack, Checkbox, HStack, PinInput, PinInputField } from "@chakra-ui/react";
+import {
+  Select,
+  Button,
+  Box,
+  Fade,
+  useDisclosure,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  useColorMode,
+  Text,
+  Stack,
+  Checkbox,
+  HStack,
+  PinInput,
+  PinInputField,
+  Modal,
+  ModalContent,
+  ModalCloseButton,
+  ModalHeader,
+  ModalOverlay,
+  ModalFooter,
+  ModalBody,
+  Drawer,
+  DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerOverlay,
+  Input,
+} from "@chakra-ui/react";
+import { useRef } from "react";
 
 export default function ChakraComponent() {
   const { colorMode, toggleColorMode } = useColorMode();
   const { isOpen, onToggle } = useDisclosure();
-  console.log(isOpen);
+  const { isOpen: _isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen: __isOpen, onOpen: __onOpen, onClose: __onClose } = useDisclosure();
+  const btnRef = useRef<HTMLButtonElement | null>(null);
   return (
     <>
       <h2>Chakra UI</h2>
@@ -24,6 +59,48 @@ export default function ChakraComponent() {
           Fade
         </Box>
       </Fade>
+
+      <Button onClick={onOpen}>Open Modal</Button>
+
+      <Modal isOpen={_isOpen} onClose={onClose}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Modal Title</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <p>Lorem, ipsum dolor sit amet consectetur adipisicing elit. Quam odit ex quo nesciunt numquam architecto quaerat sunt est delectus porro.</p>
+          </ModalBody>
+
+          <ModalFooter>
+            <Button colorScheme="blue" mr={3} onClick={onClose}>
+              Close
+            </Button>
+            <Button variant="ghost">Secondary Action</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Button ref={btnRef} colorScheme="teal" onClick={__onOpen}>
+        Open
+      </Button>
+      <Drawer isOpen={__isOpen} placement="right" onClose={__onClose} finalFocusRef={btnRef}>
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton />
+          <DrawerHeader>Create your account</DrawerHeader>
+
+          <DrawerBody>
+            <Input placeholder="Type here..." />
+          </DrawerBody>
+
+          <DrawerFooter>
+            <Button variant="outline" mr={3} onClick={__onClose}>
+              Cancel
+            </Button>
+            <Button colorScheme="blue">Save</Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
 
       <Stack spacing={5} direction="row">
         <Checkbox colorScheme="red" defaultChecked>
