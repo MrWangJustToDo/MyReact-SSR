@@ -3578,7 +3578,6 @@ var nativeUpdate = function nativeUpdate(fiber) {
   }
 
   debugWithDOM(fiber);
-  fiber.applyVDom();
 
   if (isAppMounted.current && !isHydrateRender.current && !isServerRender.current && (enableHighlight.current || window.__highlight__)) {
     HighLight.getHighLightInstance().highLight(fiber);
@@ -3593,6 +3592,7 @@ var update = function update(fiber, hydrate) {
       nativeUpdate(fiber);
     }
 
+    fiber.applyVDom();
     fiber.__pendingUpdate__ = false;
   }
 };
