@@ -1,7 +1,7 @@
 import { Carousel, Slider, Switch, Calendar, Tree } from "antd";
 import { useState } from "react";
 
-import type { DataNode } from "antd/lib/tree";
+import type { DataNode, TreeProps } from "antd/lib/tree";
 
 const treeData: DataNode[] = [
   {
@@ -61,9 +61,11 @@ const AntDesignComponent = () => {
     setAutoExpandParent(false);
   };
 
-  const onCheck = (checkedKeysValue: React.Key[]) => {
+  const onCheck: TreeProps["onCheck"] = (checkedKeysValue) => {
     console.log("onCheck", checkedKeysValue);
-    setCheckedKeys(checkedKeysValue);
+    if (Array.isArray(checkedKeysValue)) {
+      setCheckedKeys(checkedKeysValue);
+    }
   };
 
   const onSelect = (selectedKeysValue: React.Key[], info: any) => {
@@ -76,6 +78,8 @@ const AntDesignComponent = () => {
       <h2>Ant Design</h2>
       <Switch />
       <br />
+      {__SERVER__ ? "server" : <p>client</p>}
+      <p>test hydrate</p>
       <Slider />
       <br />
       <Calendar style={{ width: "400px" }} />

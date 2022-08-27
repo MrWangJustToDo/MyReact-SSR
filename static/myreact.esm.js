@@ -2875,19 +2875,6 @@ var context = function context(fiber) {
   }
 };
 
-var fallback = function fallback(dom) {
-  var pendingRemove = [];
-
-  while (dom) {
-    pendingRemove.push(dom);
-    dom = dom.nextSibling;
-  }
-
-  pendingRemove.forEach(function (m) {
-    return m.remove();
-  });
-};
-
 var getNextHydrateDom = function getNextHydrateDom(parentDom) {
   var children = Array.from(parentDom.childNodes);
   return children.find(function (dom) {
@@ -2946,7 +2933,7 @@ var checkHydrateDom = function checkHydrateDom(fiber, dom) {
 };
 
 var getHydrateDom = function getHydrateDom(fiber, parentDom) {
-  if (Object.prototype.hasOwnProperty.call(IS_SINGLE_ELEMENT, parentDom.tagName.toLowerCase())) return {
+  if (IS_SINGLE_ELEMENT[parentDom.tagName.toLowerCase()]) return {
     result: true
   };
   var dom = getNextHydrateDom(parentDom);
@@ -2954,7 +2941,6 @@ var getHydrateDom = function getHydrateDom(fiber, parentDom) {
 
   if (result) {
     var typedDom = dom;
-    typedDom.__hydrate__ = true;
     fiber.dom = typedDom;
     return {
       dom: typedDom,
@@ -2968,19 +2954,13 @@ var getHydrateDom = function getHydrateDom(fiber, parentDom) {
   }
 };
 
+// import { fallback } from './fallback';
 var hydrateCreate = function hydrateCreate(fiber, parentFiberWithDom) {
   if (fiber.__isTextNode__ || fiber.__isPlainNode__) {
     var _getHydrateDom = getHydrateDom(fiber, parentFiberWithDom.dom),
-        dom = _getHydrateDom.dom,
         result = _getHydrateDom.result;
 
-    if (result) {
-      return true;
-    } else if (dom) {
-      fallback(dom);
-    }
-
-    return false;
+    return result;
   }
 
   throw new Error('hydrate error, portal element can not hydrate');
@@ -3048,6 +3028,19 @@ var create = function create(fiber, hydrate, parentFiberWithDom) {
       nativeCreate(fiber);
     }
 
+    if (isHydrateRender.current) {
+      var typedDom = fiber.dom;
+      typedDom.__hydrate__ = true;
+
+      if (enableAllCheck.current && fiber.__isPlainNode__) {
+        if (!re) {
+          typedDom.setAttribute('debug_hydrate', 'fail');
+        } else {
+          typedDom.setAttribute('debug_hydrate', 'success');
+        }
+      }
+    }
+
     fiber.__pendingCreate__ = false;
     return re;
   }
@@ -3070,6 +3063,22 @@ var effect = function effect(fiber) {
     return effect.call(null);
   });
   fiber.__effectQueue__ = [];
+};
+
+var fallback = function fallback(fiber) {
+  if (isHydrateRender.current && fiber.__isPlainNode__) {
+    var dom = fiber.dom;
+    var children = Array.from(dom.childNodes);
+    children.forEach(function (node) {
+      var typedNode = node;
+
+      if (typedNode.nodeType !== document.COMMENT_NODE && !typedNode.__hydrate__) {
+        node.remove();
+      }
+
+      delete typedNode['__hydrate__'];
+    });
+  }
 };
 
 var append$1 = function append(fiber, parentDOM) {
@@ -3468,6 +3477,7 @@ var HighLight = function HighLight() {
   };
 
   this.container = document.createElement('div');
+  this.container.setAttribute('debug_highlight', 'MyReact');
   this.container.style.cssText = "\n      position: absolute;\n      z-index: 999999;\n      width: 100%;\n      left: 0;\n      top: 0;\n      pointer-events: none;\n      ";
   document.body.append(this.container);
 };
@@ -3656,6 +3666,7 @@ var ClientDispatch = /*#__PURE__*/function () {
 
     if (_fiber.child) {
       _final = this.reconcileCommit(_fiber.child, _result, _fiber.dom ? _fiber : _parentFiberWithDom);
+      fallback(_fiber);
     }
 
     safeCallWithFiber({
